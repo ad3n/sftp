@@ -8,14 +8,36 @@ type allocator struct {
 	sync.Mutex
 	available [][]byte
 	// map key is the request order
-	used map[uint32][][]byte
+	used map[uint32]pageSet
+}
+
+// pageSet keeps the pages used by the common receive+transfer path inline.
+// This avoids allocating a short []byte slice for every request. Requests that
+// need more than two pages transparently fall back to overflow.
+type pageSet struct {
+	inline   [2][]byte
+	count    int
+	overflow [][]byte
+}
+
+func (p *pageSet) add(page []byte) {
+	if p.count < len(p.inline) {
+		p.inline[p.count] = page
+		p.count++
+		return
+	}
+	p.overflow = append(p.overflow, page)
+}
+
+func (p *pageSet) len() int {
+	return p.count + len(p.overflow)
 }
 
 func newAllocator() *allocator {
 	return &allocator{
 		// micro optimization: initialize available pages with an initial capacity
 		available: make([][]byte, 0, SftpServerWorkerCount*2),
-		used:      make(map[uint32][][]byte),
+		used:      make(map[uint32]pageSet),
 	}
 }
 
@@ -24,7 +46,6 @@ func newAllocator() *allocator {
 // receiving new packets and reading the files to serve
 func (a *allocator) GetPage(requestOrderID uint32) []byte {
 	a.Lock()
-	defer a.Unlock()
 
 	var result []byte
 
@@ -43,7 +64,10 @@ func (a *allocator) GetPage(requestOrderID uint32) []byte {
 	}
 
 	// put result in used pages
-	a.used[requestOrderID] = append(a.used[requestOrderID], result)
+	pages := a.used[requestOrderID]
+	pages.add(result)
+	a.used[requestOrderID] = pages
+	a.Unlock()
 
 	return result
 }
@@ -51,12 +75,13 @@ func (a *allocator) GetPage(requestOrderID uint32) []byte {
 // ReleasePages marks unused all pages in use for the given requestID
 func (a *allocator) ReleasePages(requestOrderID uint32) {
 	a.Lock()
-	defer a.Unlock()
 
-	if used := a.used[requestOrderID]; len(used) > 0 {
-		a.available = append(a.available, used...)
+	if used, ok := a.used[requestOrderID]; ok {
+		a.available = append(a.available, used.inline[:used.count]...)
+		a.available = append(a.available, used.overflow...)
+		delete(a.used, requestOrderID)
 	}
-	delete(a.used, requestOrderID)
+	a.Unlock()
 }
 
 // Free removes all the used and available pages.
@@ -66,7 +91,7 @@ func (a *allocator) Free() {
 	defer a.Unlock()
 
 	a.available = nil
-	a.used = make(map[uint32][][]byte)
+	a.used = make(map[uint32]pageSet)
 }
 
 func (a *allocator) countUsedPages() int {
@@ -75,7 +100,7 @@ func (a *allocator) countUsedPages() int {
 
 	num := 0
 	for _, p := range a.used {
-		num += len(p)
+		num += p.len()
 	}
 	return num
 }

@@ -1,7 +1,7 @@
 package openssh
 
 import (
-	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
+	sshfx "github.com/ad3n/sftp/internal/encoding/ssh/filexfer"
 )
 
 const extensionStatVFS = "statvfs@openssh.com"

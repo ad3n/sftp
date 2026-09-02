@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pkg/sftp"
+	"github.com/ad3n/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -155,7 +155,7 @@ func ExampleFile_ReadFrom_bufio() {
 	// workaround is to wrap your writer in a struct that only implements
 	// io.Writer.
 	//
-	// For background see github.com/pkg/sftp/issues/125
+	// For background see github.com/ad3n/sftp/issues/125
 
 	var data_source io.Reader
 	var f *sftp.File

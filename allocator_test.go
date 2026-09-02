@@ -1,7 +1,9 @@
 package sftp
 
 import (
+	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -93,22 +95,60 @@ func TestAllocator(t *testing.T) {
 	assert.Equal(t, 0, allocator.countUsedPages())
 }
 
+func TestAllocatorCommonPathHasNoAllocations(t *testing.T) {
+	allocator := newAllocator()
+	benchAllocator(allocator, 1) // allocate and warm the two reusable pages
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		benchAllocator(allocator, 1)
+	})
+	assert.Zero(t, allocs)
+}
+
+func TestAllocatorConcurrentPageOwnership(t *testing.T) {
+	const (
+		workers    = 32
+		iterations = 100
+	)
+
+	allocator := newAllocator()
+	var wg sync.WaitGroup
+	for worker := uint32(1); worker <= workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range iterations {
+				page := allocator.GetPage(worker)
+				page[0] = byte(worker)
+				runtime.Gosched()
+				assert.Equal(t, byte(worker), page[0])
+				allocator.ReleasePages(worker)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Zero(t, allocator.countUsedPages())
+}
+
 func BenchmarkAllocatorSerial(b *testing.B) {
 	allocator := newAllocator()
-	for i := 0; i < b.N; i++ {
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
 		benchAllocator(allocator, uint32(i))
 	}
 }
 
 func BenchmarkAllocatorParallel(b *testing.B) {
-	var counter uint32
+	var counter atomic.Uint32
 	allocator := newAllocator()
 	for i := 1; i <= 8; i *= 2 {
 		b.Run(strconv.Itoa(i), func(b *testing.B) {
+			b.ReportAllocs()
 			b.SetParallelism(i)
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					benchAllocator(allocator, atomic.AddUint32(&counter, 1))
+					benchAllocator(allocator, counter.Add(1))
 				}
 			})
 		})

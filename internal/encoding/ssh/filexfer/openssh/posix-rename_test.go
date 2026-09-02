@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	sshfx "github.com/pkg/sftp/internal/encoding/ssh/filexfer"
+	sshfx "github.com/ad3n/sftp/internal/encoding/ssh/filexfer"
 )
 
 var _ sshfx.PacketMarshaller = &POSIXRenameExtendedPacket{}
