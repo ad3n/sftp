@@ -183,6 +183,7 @@ type Client struct {
 
 	maxPacket             int // max packet size read or written.
 	maxConcurrentRequests int
+	resPool               resChanPool
 	nextid                uint32
 
 	// write concurrency is… error prone.
@@ -251,6 +252,8 @@ func newClientPipe(rd, stderr io.Reader, wr io.WriteCloser, wait func() error, o
 			return nil, err
 		}
 	}
+
+	c.resPool = newResChanPool(c.maxConcurrentRequests)
 
 	if stderr != nil {
 		wr := io.Discard
@@ -1221,8 +1224,6 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
-	resPool := newResChanPool(concurrency)
-
 	type work struct {
 		id  uint32
 		res chan result
@@ -1247,7 +1248,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 			}
 
 			id := f.c.nextID()
-			res := resPool.Get()
+			res := f.c.resPool.Get()
 
 			f.c.dispatchRequest(res, &sshFxpReadPacket{
 				ID:     id,
@@ -1284,7 +1285,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 				var n int
 
 				s := <-packet.res
-				resPool.Put(packet.res)
+				f.c.resPool.Put(packet.res)
 
 				err := s.err
 				if err == nil {
@@ -1432,8 +1433,6 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 
 	chunkSize := f.c.maxPacket
 	pool := newBufPool(concurrency, chunkSize)
-	resPool := newResChanPool(concurrency)
-
 	cancel := make(chan struct{})
 	var wg sync.WaitGroup
 	defer func() {
@@ -1472,7 +1471,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 		cur := writeCh
 		for {
 			id := f.c.nextID()
-			res := resPool.Get()
+			res := f.c.resPool.Get()
 
 			next := make(chan writeWork)
 			readWork := readWork{
@@ -1513,7 +1512,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				var n int
 
 				s := <-readWork.res
-				resPool.Put(readWork.res)
+				f.c.resPool.Put(readWork.res)
 
 				err := s.err
 				if err == nil {
@@ -1680,8 +1679,6 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 		concurrency = f.c.maxConcurrentRequests
 	}
 
-	pool := newResChanPool(concurrency)
-
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
@@ -1696,7 +1693,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 			}
 
 			id := f.c.nextID()
-			res := pool.Get()
+			res := f.c.resPool.Get()
 			off := off + int64(read)
 
 			f.c.dispatchRequest(res, &sshFxpWritePacket{
@@ -1732,7 +1729,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 
 			for work := range workCh {
 				s := <-work.res
-				pool.Put(work.res)
+				f.c.resPool.Put(work.res)
 
 				err := s.err
 				if err == nil {
@@ -1874,8 +1871,6 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 		concurrency = f.c.maxConcurrentRequests
 	}
 
-	pool := newResChanPool(concurrency)
-
 	// Slice: cut up the Read into any number of buffers of length <= f.c.maxPacket, and at appropriate offsets.
 	go func() {
 		defer close(workCh)
@@ -1891,7 +1886,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 				read += int64(n)
 
 				id := f.c.nextID()
-				res := pool.Get()
+				res := f.c.resPool.Get()
 
 				f.c.dispatchRequest(res, &sshFxpWritePacket{
 					ID:     id,
@@ -1928,7 +1923,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 			for work := range workCh {
 				s := <-work.res
-				pool.Put(work.res)
+				f.c.resPool.Put(work.res)
 
 				err := s.err
 				if err == nil {
