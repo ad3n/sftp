@@ -400,15 +400,25 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 		}
 		switch typ {
 		case sshFxpName:
-			sid, data := unmarshalUint32(data)
-			if sid != id {
-				return nil, &unexpectedIDErr{id, sid}
+			data, err = unmarshalSID(id, data)
+			if err != nil {
+				return nil, err
 			}
-			count, data := unmarshalUint32(data)
-			for i := uint32(0); i < count; i++ {
+			var count int
+			count, data, err = unmarshalCount(data)
+			if err != nil {
+				return nil, err
+			}
+			for range count {
 				var filename string
-				filename, data = unmarshalString(data)
-				_, data = unmarshalString(data) // discard longname
+				filename, data, err = unmarshalStringSafe(data)
+				if err != nil {
+					return nil, err
+				}
+				_, data, err = unmarshalStringSafe(data) // discard longname
+				if err != nil {
+					return nil, err
+				}
 				var attr *FileStat
 				attr, data, err = unmarshalAttrs(data)
 				if err != nil {
@@ -444,11 +454,14 @@ func (c *Client) opendir(ctx context.Context, path string) (string, error) {
 	}
 	switch typ {
 	case sshFxpHandle:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return "", &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return "", err
 		}
-		handle, _ := unmarshalString(data)
+		handle, _, err := unmarshalStringSafe(data)
+		if err != nil {
+			return "", err
+		}
 		return handle, nil
 	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
@@ -480,9 +493,9 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 	}
 	switch typ {
 	case sshFxpAttrs:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return nil, err
 		}
 		attr, _, err := unmarshalAttrs(data)
 		if err != nil {
@@ -509,15 +522,21 @@ func (c *Client) ReadLink(p string) (string, error) {
 	}
 	switch typ {
 	case sshFxpName:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return "", &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return "", err
 		}
-		count, data := unmarshalUint32(data)
+		count, data, err := unmarshalCount(data)
+		if err != nil {
+			return "", err
+		}
 		if count != 1 {
-			return "", unexpectedCount(1, count)
+			return "", unexpectedCount(1, uint32(count))
 		}
-		filename, _ := unmarshalString(data) // ignore dummy attributes
+		filename, _, err := unmarshalStringSafe(data) // ignore dummy attributes
+		if err != nil {
+			return "", err
+		}
 		return filename, nil
 	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
@@ -680,11 +699,14 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 	}
 	switch typ {
 	case sshFxpHandle:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return nil, err
 		}
-		handle, _ := unmarshalString(data)
+		handle, _, err := unmarshalStringSafe(data)
+		if err != nil {
+			return nil, err
+		}
 		return &File{c: c, path: path, handle: handle}, nil
 	case sshFxpStatus:
 		return nil, normaliseError(unmarshalStatus(id, data))
@@ -724,9 +746,9 @@ func (c *Client) stat(path string) (*FileStat, error) {
 	}
 	switch typ {
 	case sshFxpAttrs:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return nil, err
 		}
 		attr, _, err := unmarshalAttrs(data)
 		return attr, err
@@ -748,9 +770,9 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 	}
 	switch typ {
 	case sshFxpAttrs:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return nil, &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return nil, err
 		}
 		attr, _, err := unmarshalAttrs(data)
 		return attr, err
@@ -945,15 +967,21 @@ func (c *Client) RealPath(path string) (string, error) {
 	}
 	switch typ {
 	case sshFxpName:
-		sid, data := unmarshalUint32(data)
-		if sid != id {
-			return "", &unexpectedIDErr{id, sid}
+		data, err := unmarshalSID(id, data)
+		if err != nil {
+			return "", err
 		}
-		count, data := unmarshalUint32(data)
+		count, data, err := unmarshalCount(data)
+		if err != nil {
+			return "", err
+		}
 		if count != 1 {
-			return "", unexpectedCount(1, count)
+			return "", unexpectedCount(1, uint32(count))
 		}
-		filename, _ := unmarshalString(data) // ignore attributes
+		filename, _, err := unmarshalStringSafe(data) // ignore attributes
+		if err != nil {
+			return "", err
+		}
 		return filename, nil
 	case sshFxpStatus:
 		return "", normaliseError(unmarshalStatus(id, data))
@@ -1150,13 +1178,11 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 			return n, normaliseError(unmarshalStatus(id, data))
 
 		case sshFxpData:
-			sid, data := unmarshalUint32(data)
-			if id != sid {
-				return n, &unexpectedIDErr{id, sid}
+			data, err = unmarshalDataReply(id, data)
+			if err != nil {
+				return n, err
 			}
-
-			l, data := unmarshalUint32(data)
-			n += copy(b[n:], data[:l])
+			n += copy(b[n:], data)
 
 		default:
 			return n, unimplementedPacketErr(typ)
@@ -1294,13 +1320,10 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 						err = normaliseError(unmarshalStatus(packet.id, s.data))
 
 					case sshFxpData:
-						sid, data := unmarshalUint32(s.data)
-						if packet.id != sid {
-							err = &unexpectedIDErr{packet.id, sid}
-
-						} else {
-							l, data := unmarshalUint32(data)
-							n = copy(packet.b, data[:l])
+						var data []byte
+						data, err = unmarshalDataReply(packet.id, s.data)
+						if err == nil {
+							n = copy(packet.b, data)
 
 							// For normal disk files, it is guaranteed that this will read
 							// the specified number of bytes, or up to end of file.
@@ -1521,14 +1544,15 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 						err = normaliseError(unmarshalStatus(readWork.id, s.data))
 
 					case sshFxpData:
-						sid, data := unmarshalUint32(s.data)
-						if readWork.id != sid {
-							err = &unexpectedIDErr{readWork.id, sid}
-
-						} else {
-							l, data := unmarshalUint32(data)
-							b = pool.Get()[:l]
-							n = copy(b, data[:l])
+						var data []byte
+						data, err = unmarshalDataReply(readWork.id, s.data)
+						if err == nil {
+							// A malicious server may return more data than we
+							// requested (up to the packet limit, larger than the
+							// pool buffer); copy bounds it to the buffer size
+							// rather than slicing past the page and panicking.
+							b = pool.Get()
+							n = copy(b, data)
 							b = b[:n]
 						}
 
@@ -1644,8 +1668,11 @@ func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
 
 	switch typ {
 	case sshFxpStatus:
-		id, _ := unmarshalUint32(data)
-		err := normaliseError(unmarshalStatus(id, data))
+		id, _, err := unmarshalUint32Safe(data)
+		if err != nil {
+			return 0, err
+		}
+		err = normaliseError(unmarshalStatus(id, data))
 		if err != nil {
 			return 0, err
 		}
@@ -1880,7 +1907,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 
 		for {
 			// Fill the entire buffer.
-			n, err := io.ReadFull(r, b)
+			n, err := readFull(r, b)
 
 			if n > 0 {
 				read += int64(n)
@@ -1906,7 +1933,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 			}
 
 			if err != nil {
-				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+				if !errors.Is(err, io.EOF) {
 					errCh <- rwErr{off, err}
 				}
 				return
@@ -2061,7 +2088,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 	var read int64
 	for {
 		// Fill the entire buffer.
-		n, err := io.ReadFull(r, b)
+		n, err := readFull(r, b)
 		if n < 0 {
 			panic("sftp.File: reader returned negative count from Read")
 		}
@@ -2072,19 +2099,32 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 			m, err2 := f.writeChunkAt(ch, b[:n], f.offset)
 			f.offset += int64(m)
 
-			if err == nil {
+			if err == nil || (err2 != nil && errors.Is(err, io.EOF)) {
 				err = err2
 			}
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			if errors.Is(err, io.EOF) {
 				return read, nil // return nil explicitly.
 			}
 
 			return read, err
 		}
 	}
+}
+
+// readFull reads from r into b until b is full or r returns an error.
+// Unlike io.ReadFull, it returns the error from r unchanged.
+// io.ReadFull turns an io.EOF after a partial read into io.ErrUnexpectedEOF,
+// which can't be told apart from an io.ErrUnexpectedEOF returned by r itself.
+func readFull(r io.Reader, b []byte) (n int, err error) {
+	for n < len(b) && err == nil {
+		var nn int
+		nn, err = r.Read(b[n:])
+		n += nn
+	}
+	return n, err
 }
 
 // Seek implements io.Seeker by setting the client offset for the next Read or
