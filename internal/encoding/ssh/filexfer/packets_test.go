@@ -44,7 +44,7 @@ func TestRawPacket(t *testing.T) {
 
 	*p = RawPacket{}
 
-	if err := p.ReadFrom(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
+	if err := p.ReadPacket(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
@@ -113,7 +113,7 @@ func TestRequestPacket(t *testing.T) {
 
 	*p = RequestPacket{}
 
-	if err := p.ReadFrom(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
+	if err := p.ReadPacket(bytes.NewReader(buf), nil, DefaultMaxPacketLength); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 

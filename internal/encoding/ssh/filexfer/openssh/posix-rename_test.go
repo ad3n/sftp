@@ -45,7 +45,6 @@ func TestPOSIXRenameExtendedPacket(t *testing.T) {
 
 	var p sshfx.ExtendedPacket
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(sshfx.NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

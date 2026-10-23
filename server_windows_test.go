@@ -60,15 +60,12 @@ func TestServer_toLocalPath(t *testing.T) {
 			name:        "workdir and non-unixy path prefixes workdir",
 			withWorkDir: "C:\\Users\\User",
 			p:           "C:\\file",
-			// This may look like a bug but it is the result of passing
-			// invalid input (a non-unixy path) to the server.
+
 			want: "C:\\Users\\User\\C:\\file",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We don't need to initialize the Server further to test
-			// toLocalPath behavior.
 			s := &Server{}
 			if tt.withWorkDir != "" {
 				if err := WithServerWorkingDirectory(tt.withWorkDir)(s); err != nil {

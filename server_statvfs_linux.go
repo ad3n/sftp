@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 package sftp
 
@@ -16,8 +15,8 @@ func statvfsFromStatfst(stat *syscall.Statfs_t) (*StatVFS, error) {
 		Bavail:  stat.Bavail,
 		Files:   stat.Files,
 		Ffree:   stat.Ffree,
-		Favail:  stat.Ffree,         // not sure how to calculate Favail
-		Flag:    uint64(stat.Flags), // assuming POSIX?
+		Favail:  stat.Ffree,
+		Flag:    uint64(stat.Flags),
 		Namemax: uint64(stat.Namelen),
 	}, nil
 }

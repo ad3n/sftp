@@ -1,13 +1,9 @@
 package main
 
-// small wrapper around sftp server that allows it to be used as a separate process subsystem call by the ssh server.
-// in practice this will statically link; however this allows unit testing from the sftp client.
-
 import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/ad3n/sftp"
@@ -26,10 +22,11 @@ func main() {
 	flag.StringVar(&debugLevel, "l", "none", "debug level (ignored)")
 	flag.Parse()
 
-	debugStream := ioutil.Discard
+	debugStream := io.Discard
 	if debugStderr {
 		debugStream = os.Stderr
 	}
+
 	options = append(options, sftp.WithDebug(debugStream))
 
 	if readOnly {

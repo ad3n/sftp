@@ -7,7 +7,13 @@ import (
 	sshfx "github.com/ad3n/sftp/internal/encoding/ssh/filexfer"
 )
 
-var _ sshfx.PacketMarshaller = &StatVFSExtendedPacket{}
+var (
+	_ sshfx.PacketMarshaller = &StatVFSExtendedPacket{}
+
+	_ sshfx.PacketMarshaller = &FStatVFSExtendedPacket{}
+
+	_ sshfx.Packet = &StatVFSExtendedReplyPacket{}
+)
 
 func init() {
 	RegisterExtensionStatVFS()
@@ -42,7 +48,6 @@ func TestStatVFSExtendedPacket(t *testing.T) {
 
 	var p sshfx.ExtendedPacket
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(sshfx.NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -60,8 +65,6 @@ func TestStatVFSExtendedPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", ep.Path, path)
 	}
 }
-
-var _ sshfx.PacketMarshaller = &FStatVFSExtendedPacket{}
 
 func init() {
 	RegisterExtensionFStatVFS()
@@ -96,7 +99,6 @@ func TestFStatVFSExtendedPacket(t *testing.T) {
 
 	var p sshfx.ExtendedPacket
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(sshfx.NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -114,8 +116,6 @@ func TestFStatVFSExtendedPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", ep.Path, path)
 	}
 }
-
-var _ sshfx.Packet = &StatVFSExtendedReplyPacket{}
 
 func TestStatVFSExtendedReplyPacket(t *testing.T) {
 	const (
@@ -183,7 +183,6 @@ func TestStatVFSExtendedReplyPacket(t *testing.T) {
 		Data: ep,
 	}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(sshfx.NewBuffer(data[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

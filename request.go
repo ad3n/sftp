@@ -11,23 +11,33 @@ import (
 	"syscall"
 )
 
-// MaxFilelist is the max number of files to return in a readdir batch.
 var MaxFilelist int64 = 100
 
-// state encapsulates the reader/writer/readdir from handlers.
-type state struct {
-	mu sync.RWMutex
+type (
+	state struct {
+		writerAt         io.WriterAt
+		readerAt         io.ReaderAt
+		writerAtReaderAt WriterAtReaderAt
+		listerAt         ListerAt
+		lsoffset         int64
+		mu               sync.RWMutex
+	}
 
-	writerAt         io.WriterAt
-	readerAt         io.ReaderAt
-	writerAtReaderAt WriterAtReaderAt
-	listerAt         ListerAt
-	lsoffset         int64
-}
+	Request struct {
+		Method   string
+		Filepath string
+		Flags    uint32
+		Attrs    []byte
+		Target   string
+		handle   string
 
-// copy returns a shallow copy the state.
-// This is broken out to specific fields,
-// because we have to copy around the mutex in state.
+		state
+
+		ctx       context.Context
+		cancelCtx context.CancelFunc
+	}
+)
+
 func (s *state) copy() state {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -90,7 +100,6 @@ func (s *state) getAllReaderWriters() (io.ReaderAt, io.WriterAt, WriterAtReaderA
 	return s.readerAt, s.writerAt, s.writerAtReaderAt
 }
 
-// Returns current offset for file list
 func (s *state) lsNext() int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -98,7 +107,6 @@ func (s *state) lsNext() int64 {
 	return s.lsoffset
 }
 
-// Increases next offset
 func (s *state) lsInc(offset int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,7 +114,6 @@ func (s *state) lsInc(offset int64) {
 	s.lsoffset += offset
 }
 
-// manage file read/write state
 func (s *state) setListerAt(la ListerAt) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,32 +138,13 @@ func (s *state) closeListerAt() error {
 		if c, ok := s.listerAt.(io.Closer); ok {
 			err = c.Close()
 		}
+
 		s.listerAt = nil
 	}
 
 	return err
 }
 
-// Request contains the data and state for the incoming service request.
-type Request struct {
-	// Get, Put, Setstat, Stat, Rename, Remove
-	// Rmdir, Mkdir, List, Readlink, Link, Symlink
-	Method   string
-	Filepath string
-	Flags    uint32
-	Attrs    []byte // convert to sub-struct
-	Target   string // for renames and sym-links
-	handle   string
-
-	// reader/writer/readdir from handlers
-	state
-
-	// context lasts duration of request
-	ctx       context.Context
-	cancelCtx context.CancelFunc
-}
-
-// NewRequest creates a new Request object.
 func NewRequest(method, path string) *Request {
 	return &Request{
 		Method:   method,
@@ -164,9 +152,6 @@ func NewRequest(method, path string) *Request {
 	}
 }
 
-// copy returns a shallow copy of existing request.
-// This is broken out to specific fields,
-// because we have to copy around the mutex in state.
 func (r *Request) copy() *Request {
 	return &Request{
 		Method:   r.Method,
@@ -183,7 +168,6 @@ func (r *Request) copy() *Request {
 	}
 }
 
-// New Request initialized based on packet data
 func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Request {
 	request := &Request{
 		Method:   requestMethod(pkt),
@@ -201,44 +185,35 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 	case *sshFxpRenamePacket:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
 	case *sshFxpSymlinkPacket:
-		// NOTE: given a POSIX compliant signature: symlink(target, linkpath string)
-		// this makes Request.Target the linkpath, and Request.Filepath the target.
+
 		request.Target = cleanPathWithBase(baseDir, p.Linkpath)
 		request.Filepath = p.Targetpath
 	case *sshFxpExtendedPacketHardlink:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
 	}
+
 	return request
 }
 
-// Context returns the request's context. To change the context,
-// use WithContext.
-//
-// The returned context is always non-nil; it defaults to the
-// background context.
-//
-// For incoming server requests, the context is canceled when the
-// request is complete or the client's connection closes.
 func (r *Request) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx
 	}
+
 	return context.Background()
 }
 
-// WithContext returns a copy of r with its context changed to ctx.
-// The provided ctx must be non-nil.
 func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
 	}
+
 	r2 := r.copy()
 	r2.ctx = ctx
 	r2.cancelCtx = nil
 	return r2
 }
 
-// Close reader/writer if possible
 func (r *Request) close() error {
 	defer func() {
 		if r.cancelCtx != nil {
@@ -250,18 +225,14 @@ func (r *Request) close() error {
 
 	rd, wr, rw := r.getAllReaderWriters()
 
-	// Close errors on a Writer are far more likely to be the important one.
-	// As they can be information that there was a loss of data.
 	if c, ok := wr.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
-			// update error if it is still nil
 			err = err2
 		}
 	}
 
 	if c, ok := rw.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
-			// update error if it is still nil
 			err = err2
 
 			r.setWriterAtReaderAt(nil)
@@ -270,7 +241,6 @@ func (r *Request) close() error {
 
 	if c, ok := rd.(io.Closer); ok {
 		if err2 := c.Close(); err == nil {
-			// update error if it is still nil
 			err = err2
 		}
 	}
@@ -278,7 +248,6 @@ func (r *Request) close() error {
 	return err
 }
 
-// Notify transfer error if any
 func (r *Request) transferError(err error) {
 	if err == nil {
 		return
@@ -299,7 +268,6 @@ func (r *Request) transferError(err error) {
 	}
 }
 
-// called from worker to handle packet/request
 func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	switch r.Method {
 	case "Get":
@@ -318,13 +286,13 @@ func (r *Request) call(handlers Handlers, pkt requestPacket, alloc *allocator, o
 		if readlinkFileLister, ok := handlers.FileList.(ReadlinkFileLister); ok {
 			return readlink(readlinkFileLister, r, pkt)
 		}
+
 		return filestat(handlers.FileList, r, pkt)
 	default:
 		return statusFromError(pkt.id(), fmt.Errorf("unexpected method: %s", r.Method))
 	}
 }
 
-// Additional initialization for Open packets
 func (r *Request) open(h Handlers, pkt requestPacket) responsePacket {
 	flags := r.Pflags()
 
@@ -391,7 +359,6 @@ func (r *Request) opendir(h Handlers, pkt requestPacket) responsePacket {
 	}
 }
 
-// wrap FileReader handler
 func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	rd := r.getReaderAt()
 	if rd == nil {
@@ -401,7 +368,7 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 	data, offset, _ := packetData(pkt, alloc, orderID, maxTxPacket)
 
 	n, err := rd.ReadAt(data, offset)
-	// only return EOF error if no data left to read
+
 	if err != nil && (err != io.EOF || n == 0) {
 		return statusFromError(pkt.id(), err)
 	}
@@ -413,7 +380,6 @@ func fileget(h FileReader, r *Request, pkt requestPacket, alloc *allocator, orde
 	}
 }
 
-// wrap FileWriter handler
 func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	wr := r.getWriterAt()
 	if wr == nil {
@@ -426,7 +392,6 @@ func fileput(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orde
 	return statusFromError(pkt.id(), err)
 }
 
-// wrap OpenFileWriter handler
 func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) responsePacket {
 	rw := r.getWriterAtReaderAt()
 	if rw == nil {
@@ -438,7 +403,7 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 		data, offset := p.getDataSlice(alloc, orderID, maxTxPacket), int64(p.Offset)
 
 		n, err := rw.ReadAt(data, offset)
-		// only return EOF error if no data left to read
+
 		if err != nil && (err != io.EOF || n == 0) {
 			return statusFromError(pkt.id(), err)
 		}
@@ -460,7 +425,6 @@ func fileputget(h FileWriter, r *Request, pkt requestPacket, alloc *allocator, o
 	}
 }
 
-// file data for additional read/write packets
 func packetData(p requestPacket, alloc *allocator, orderID uint32, maxTxPacket uint32) (data []byte, offset int64, length uint32) {
 	switch p := p.(type) {
 	case *sshFxpReadPacket:
@@ -468,10 +432,10 @@ func packetData(p requestPacket, alloc *allocator, orderID uint32, maxTxPacket u
 	case *sshFxpWritePacket:
 		return p.Data, int64(p.Offset), p.Length
 	}
+
 	return
 }
 
-// wrap FileCmder handler
 func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	switch p := pkt.(type) {
 	case *sshFxpFsetstatPacket:
@@ -486,7 +450,6 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 			return statusFromError(pkt.id(), err)
 		}
 
-		// PosixRenameFileCmder not implemented handle this request as a Rename
 		r.Method = "Rename"
 		err := h.Filecmd(r)
 		return statusFromError(pkt.id(), err)
@@ -497,6 +460,7 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 			if err != nil {
 				return statusFromError(pkt.id(), err)
 			}
+
 			stat.ID = pkt.id()
 			return stat
 		}
@@ -508,7 +472,6 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	return statusFromError(pkt.id(), err)
 }
 
-// wrap FileLister handler
 func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	lister := r.getListerAt()
 	if lister == nil {
@@ -519,8 +482,8 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	finfo := make([]os.FileInfo, MaxFilelist)
 	n, err := lister.ListAt(finfo, offset)
 	r.lsInc(int64(n))
-	// ignore EOF as we only return it when there are no results
-	finfo = finfo[:n] // avoid need for nil tests below
+
+	finfo = finfo[:n]
 
 	switch r.Method {
 	case "List":
@@ -530,8 +493,6 @@ func filelist(h FileLister, r *Request, pkt requestPacket) responsePacket {
 
 		nameAttrs := make([]*sshFxpNameAttr, 0, len(finfo))
 
-		// If the type conversion fails, we get untyped `nil`,
-		// which is handled by not looking up any names.
 		idLookup, _ := h.(NameLookupFileLister)
 
 		for _, fi := range finfo {
@@ -557,29 +518,39 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 	var lister ListerAt
 	var err error
 
-	if r.Method == "Lstat" {
-		if lstatFileLister, ok := h.(LstatFileLister); ok {
+	switch {
+	case r.Method == "Lstat":
+
+		switch lstatFileLister, ok := h.(LstatFileLister); {
+		case ok:
+
 			lister, err = lstatFileLister.Lstat(r)
-		} else {
-			// LstatFileLister not implemented handle this request as a Stat
+
+		default:
+
 			r.Method = "Stat"
 			lister, err = h.Filelist(r)
 		}
-	} else {
+
+	default:
+
 		lister, err = h.Filelist(r)
 	}
+
 	if err != nil {
 		return statusFromError(pkt.id(), err)
 	}
+
 	finfo := make([]os.FileInfo, 1)
 	n, err := lister.ListAt(finfo, 0)
-	finfo = finfo[:n] // avoid need for nil tests below
+	finfo = finfo[:n]
 
 	switch r.Method {
 	case "Stat", "Lstat":
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt.id(), err)
 		}
+
 		if n == 0 {
 			err = &os.PathError{
 				Op:   strings.ToLower(r.Method),
@@ -588,6 +559,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			}
 			return statusFromError(pkt.id(), err)
 		}
+
 		return &sshFxpStatResponse{
 			ID:   pkt.id(),
 			info: finfo[0],
@@ -596,6 +568,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 		if err != nil && err != io.EOF {
 			return statusFromError(pkt.id(), err)
 		}
+
 		if n == 0 {
 			err = &os.PathError{
 				Op:   "readlink",
@@ -604,6 +577,7 @@ func filestat(h FileLister, r *Request, pkt requestPacket) responsePacket {
 			}
 			return statusFromError(pkt.id(), err)
 		}
+
 		filename := finfo[0].Name()
 		return &sshFxpNamePacket{
 			ID: pkt.id(),
@@ -626,6 +600,7 @@ func readlink(readlinkFileLister ReadlinkFileLister, r *Request, pkt requestPack
 	if err != nil {
 		return statusFromError(pkt.id(), err)
 	}
+
 	return &sshFxpNamePacket{
 		ID: pkt.id(),
 		NameAttrs: []*sshFxpNameAttr{
@@ -638,13 +613,12 @@ func readlink(readlinkFileLister ReadlinkFileLister, r *Request, pkt requestPack
 	}
 }
 
-// init attributes of request object from packet data
 func requestMethod(p requestPacket) (method string) {
 	switch p.(type) {
 	case *sshFxpReadPacket, *sshFxpWritePacket, *sshFxpOpenPacket:
-		// set in open() above
+
 	case *sshFxpOpendirPacket, *sshFxpReaddirPacket:
-		// set in opendir() above
+
 	case *sshFxpSetstatPacket, *sshFxpFsetstatPacket:
 		method = "Setstat"
 	case *sshFxpRenamePacket:
@@ -666,5 +640,6 @@ func requestMethod(p requestPacket) (method string) {
 	case *sshFxpExtendedPacketHardlink:
 		method = "Link"
 	}
+
 	return method
 }

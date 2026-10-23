@@ -5,34 +5,32 @@ import (
 	"fmt"
 )
 
-// all incoming packets
-type requestPacket interface {
-	encoding.BinaryUnmarshaler
-	id() uint32
-}
+type (
+	requestPacket interface {
+		encoding.BinaryUnmarshaler
+		id() uint32
+	}
 
-type responsePacket interface {
-	encoding.BinaryMarshaler
-	id() uint32
-}
+	responsePacket interface {
+		encoding.BinaryMarshaler
+		id() uint32
+	}
 
-// interfaces to group types
-type hasPath interface {
-	requestPacket
-	getPath() string
-}
+	hasPath interface {
+		requestPacket
+		getPath() string
+	}
 
-type hasHandle interface {
-	requestPacket
-	getHandle() string
-}
+	hasHandle interface {
+		requestPacket
+		getHandle() string
+	}
 
-type notReadOnly interface {
-	notReadOnly()
-}
+	notReadOnly interface {
+		notReadOnly()
+	}
+)
 
-// // define types by adding methods
-// hasPath
 func (p *sshFxpLstatPacket) getPath() string    { return p.Path }
 func (p *sshFxpStatPacket) getPath() string     { return p.Path }
 func (p *sshFxpRmdirPacket) getPath() string    { return p.Path }
@@ -50,7 +48,6 @@ func (p *sshFxpOpenPacket) getPath() string     { return p.Path }
 func (p *sshFxpExtendedPacketPosixRename) getPath() string { return p.Oldpath }
 func (p *sshFxpExtendedPacketHardlink) getPath() string    { return p.Oldpath }
 
-// getHandle
 func (p *sshFxpFstatPacket) getHandle() string    { return p.Handle }
 func (p *sshFxpFsetstatPacket) getHandle() string { return p.Handle }
 func (p *sshFxpReadPacket) getHandle() string     { return p.Handle }
@@ -58,7 +55,6 @@ func (p *sshFxpWritePacket) getHandle() string    { return p.Handle }
 func (p *sshFxpReaddirPacket) getHandle() string  { return p.Handle }
 func (p *sshFxpClosePacket) getHandle() string    { return p.Handle }
 
-// notReadOnly
 func (p *sshFxpWritePacket) notReadOnly()               {}
 func (p *sshFxpSetstatPacket) notReadOnly()             {}
 func (p *sshFxpFsetstatPacket) notReadOnly()            {}
@@ -70,7 +66,6 @@ func (p *sshFxpSymlinkPacket) notReadOnly()             {}
 func (p *sshFxpExtendedPacketPosixRename) notReadOnly() {}
 func (p *sshFxpExtendedPacketHardlink) notReadOnly()    {}
 
-// some packets with ID are missing id()
 func (p *sshFxpDataPacket) id() uint32   { return p.ID }
 func (p *sshFxpStatusPacket) id() uint32 { return p.ID }
 func (p *sshFxpStatResponse) id() uint32 { return p.ID }
@@ -79,7 +74,6 @@ func (p *sshFxpHandlePacket) id() uint32 { return p.ID }
 func (p *StatVFS) id() uint32            { return p.ID }
 func (p *sshFxVersionPacket) id() uint32 { return 0 }
 
-// take raw incoming packet data and build packet objects
 func makePacket(p rxPacket) (requestPacket, error) {
 	var pkt requestPacket
 	switch p.pktType {
@@ -126,10 +120,10 @@ func makePacket(p rxPacket) (requestPacket, error) {
 	default:
 		return nil, fmt.Errorf("unhandled packet type: %s", p.pktType)
 	}
+
 	if err := pkt.UnmarshalBinary(p.pktBytes); err != nil {
-		// Return partially unpacked packet to allow callers to return
-		// error messages appropriately with necessary id() method.
 		return pkt, err
 	}
+
 	return pkt, nil
 }

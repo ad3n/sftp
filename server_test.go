@@ -17,12 +17,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type sshFxpTestBadExtendedPacket struct {
+	ID        uint32
+	Extension string
+	Data      string
+}
+
 func clientServerPair(t *testing.T, options ...ServerOption) (*Client, *Server) {
 	cr, sw := io.Pipe()
 	sr, cw := io.Pipe()
 	if *testAllocator {
 		options = append(options, WithAllocator())
 	}
+
 	server, err := NewServer(struct {
 		io.Reader
 		io.WriteCloser
@@ -30,24 +37,20 @@ func clientServerPair(t *testing.T, options ...ServerOption) (*Client, *Server) 
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	go server.Serve()
 	client, err := NewClientPipe(cr, cw)
 	if err != nil {
 		t.Fatalf("%+v\n", err)
 	}
-	return client, server
-}
 
-type sshFxpTestBadExtendedPacket struct {
-	ID        uint32
-	Extension string
-	Data      string
+	return client, server
 }
 
 func (p sshFxpTestBadExtendedPacket) id() uint32 { return p.ID }
 
 func (p sshFxpTestBadExtendedPacket) MarshalBinary() ([]byte, error) {
-	l := 4 + 1 + 4 + // uint32(length) + byte(type) + uint32(id)
+	l := 4 + 1 + 4 +
 		4 + len(p.Extension) +
 		4 + len(p.Data)
 
@@ -64,16 +67,16 @@ func checkServerAllocator(t *testing.T, server *Server) {
 	if server.pktMgr.alloc == nil {
 		return
 	}
+
 	checkAllocatorBeforeServerClose(t, server.pktMgr.alloc)
 	server.Close()
 	checkAllocatorAfterServerClose(t, server.pktMgr.alloc)
 }
 
-// test that errors are sent back when we request an invalid extended packet operation
-// this validates the following rfc draft is followed https://tools.ietf.org/html/draft-ietf-secsh-filexfer-extensions-00
 func TestInvalidExtendedPacket(t *testing.T) {
 	client, server := clientServerPair(t)
 	defer client.Close()
+
 	defer server.Close()
 
 	badPacket := sshFxpTestBadExtendedPacket{client.nextID(), "thisDoesn'tExist", "foobar"}
@@ -81,6 +84,7 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error from sendPacket: %s", err)
 	}
+
 	if typ != sshFxpStatus {
 		t.Fatalf("received non-FPX_STATUS packet: %v", typ)
 	}
@@ -90,13 +94,14 @@ func TestInvalidExtendedPacket(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to convert error from unmarshalStatus to *StatusError")
 	}
+
 	if statusErr.Code != sshFxOPUnsupported {
 		t.Errorf("statusErr.Code => %d, wanted %d", statusErr.Code, sshFxOPUnsupported)
 	}
+
 	checkServerAllocator(t, server)
 }
 
-// test that server handles concurrent requests correctly
 func TestConcurrentRequests(t *testing.T) {
 	skipIfWindows(t)
 	var filename string
@@ -108,35 +113,38 @@ func TestConcurrentRequests(t *testing.T) {
 	default:
 		filename = "/etc/passwd"
 	}
+
 	client, server := clientServerPair(t)
 	defer client.Close()
+
 	defer server.Close()
 
 	concurrency := 2
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go func() {
 			defer wg.Done()
 
-			for j := 0; j < 1024; j++ {
+			for range 1024 {
 				f, err := client.Open(filename)
 				if err != nil {
 					t.Errorf("failed to open file: %v", err)
 					continue
 				}
+
 				if err := f.Close(); err != nil {
 					t.Errorf("failed t close file: %v", err)
 				}
 			}
 		}()
 	}
+
 	wg.Wait()
 	checkServerAllocator(t, server)
 }
 
-// Test error conversion
 func TestStatusFromError(t *testing.T) {
 	type test struct {
 		err error
@@ -144,8 +152,8 @@ func TestStatusFromError(t *testing.T) {
 	}
 	tpkt := func(id, code uint32) *sshFxpStatusPacket {
 		return &sshFxpStatusPacket{
-			ID:          id,
-			StatusError: StatusError{Code: code},
+			ID:   id,
+			Code: code,
 		}
 	}
 	testCases := []test{
@@ -164,24 +172,12 @@ func TestStatusFromError(t *testing.T) {
 	}
 }
 
-// This was written to test a race b/w open immediately followed by a stat.
-// Previous to this the Open would trigger the use of a worker pool, then the
-// stat packet would come in an hit the pool and return faster than the open
-// (returning a file-not-found error).
-// The below by itself wouldn't trigger the race however, I needed to add a
-// small sleep in the openpacket code to trigger the issue. I wanted to add a
-// way to inject that in the code but right now there is no good place for it.
-// I'm thinking after I convert the server into a request-server backend I
-// might be able to do something with the runWorker method passed into the
-// packet manager. But with the 2 implementations fo the server it just doesn't
-// fit well right now.
 func TestOpenStatRace(t *testing.T) {
 	client, server := clientServerPair(t)
 	defer client.Close()
+
 	defer server.Close()
 
-	// openpacket finishes to fast to trigger race in tests
-	// need to add a small sleep on server to openpackets somehow
 	tmppath := path.Join(os.TempDir(), "stat_race")
 	pflags := toPflags(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
 	ch := make(chan result, 3)
@@ -200,7 +196,7 @@ func TestOpenStatRace(t *testing.T) {
 		r := <-ch
 		require.NoError(t, r.err)
 		switch r.typ {
-		case sshFxpAttrs, sshFxpHandle: // ignore
+		case sshFxpAttrs, sshFxpHandle:
 		case sshFxpStatus:
 			err := normaliseError(unmarshalStatus(id, r.data))
 			assert.NoError(t, err, "race hit, stat before open")
@@ -215,13 +211,13 @@ func TestOpenStatRace(t *testing.T) {
 }
 
 func TestOpenWithPermissions(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	skipIfWindows(t)
 
 	client, server := clientServerPair(t)
 	defer client.Close()
+
 	defer server.Close()
 
 	tmppath := path.Join(os.TempDir(), "open_permissions")
@@ -244,9 +240,10 @@ func TestOpenWithPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
+
 	switch typ {
 	case sshFxpHandle:
-		// do nothing, we can just leave the handle open.
+
 	case sshFxpStatus:
 		t.Fatal("unexpected status:", normaliseError(unmarshalStatus(id1, data)))
 	default:
@@ -262,7 +259,6 @@ func TestOpenWithPermissions(t *testing.T) {
 		t.Errorf("stat.Mode() = %v was expecting 0o745", stat.Mode())
 	}
 
-	// Existing files should not have their permissions changed.
 	typ, data, err = client.sendPacket(ctx, nil, &sshFxpOpenPacket{
 		ID:     id2,
 		Path:   tmppath,
@@ -275,9 +271,10 @@ func TestOpenWithPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal("unexpected error:", err)
 	}
+
 	switch typ {
 	case sshFxpHandle:
-		// do nothing, we can just leave the handle open.
+
 	case sshFxpStatus:
 		t.Fatal("unexpected status:", normaliseError(unmarshalStatus(id2, data)))
 	default:
@@ -291,52 +288,48 @@ func TestOpenWithPermissions(t *testing.T) {
 	checkServerAllocator(t, server)
 }
 
-// Ensure that a read-only server rejects requests that modify the filesystem
-// even when they do not ask for write access.
 func TestReadOnlyServerRejectsWrites(t *testing.T) {
 	skipIfWindows(t)
 
 	client, server := clientServerPair(t, ReadOnly())
 	defer client.Close()
+
 	defer server.Close()
 
 	dir := t.TempDir()
 	existing := path.Join(dir, "existing")
 	require.NoError(t, os.WriteFile(existing, []byte("content"), 0o644))
 
-	// hardlink@openssh.com
 	link := path.Join(dir, "link")
 	assert.Error(t, client.Link(existing, link))
 	assert.NoFileExists(t, link)
 
-	// SSH_FXF_READ|SSH_FXF_CREAT
 	created := path.Join(dir, "created")
 	if f, err := client.OpenFile(created, os.O_RDONLY|os.O_CREATE); err == nil {
 		f.Close()
 		t.Error("expected error opening with O_CREATE on a read-only server")
 	}
+
 	assert.NoFileExists(t, created)
 
-	// SSH_FXF_READ|SSH_FXF_TRUNC
 	if f, err := client.OpenFile(existing, os.O_RDONLY|os.O_TRUNC); err == nil {
 		f.Close()
 		t.Error("expected error opening with O_TRUNC on a read-only server")
 	}
+
 	b, err := os.ReadFile(existing)
 	require.NoError(t, err)
 	assert.Equal(t, "content", string(b))
 
-	// Plain reads must still work.
 	f, err := client.Open(existing)
 	require.NoError(t, err)
 	f.Close()
 }
 
-// Ensure that proper error codes are returned for non existent files, such
-// that they are mapped back to a 'not exists' error on the client side.
 func TestStatNonExistent(t *testing.T) {
 	client, server := clientServerPair(t)
 	defer client.Close()
+
 	defer server.Close()
 
 	for _, file := range []string{"/doesnotexist", "/doesnotexist/a/b"} {
@@ -353,11 +346,9 @@ func TestServerWithBrokenClient(t *testing.T) {
 	brokenOpen = brokenOpen[:len(brokenOpen)-2]
 
 	for _, clientInput := range [][]byte{
-		// Packet length zero (never valid). This used to crash the server.
 		{0, 0, 0, 0},
 		append(validInit, 0, 0, 0, 0),
 
-		// Client hangs up mid-packet.
 		append(validInit, brokenOpen...),
 	} {
 		srv, err := NewServer(struct {
@@ -378,8 +369,6 @@ func TestServerWithBrokenClient(t *testing.T) {
 func TestServerDoesNotExecuteMalformedPacket(t *testing.T) {
 	dir := path.Join(t.TempDir(), "should-not-exist")
 
-	// A mkdir packet with its trailing attrs flags cut off: the path parses,
-	// but the packet as a whole is malformed and must not be executed.
 	mkdir := sp(&sshFxpMkdirPacket{ID: 1, Path: dir})
 	mkdir = mkdir[:len(mkdir)-4]
 	binary.BigEndian.PutUint32(mkdir, uint32(len(mkdir)-4))

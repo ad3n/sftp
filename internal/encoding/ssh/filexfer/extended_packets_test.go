@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+var (
+	_ Packet = &ExtendedPacket{}
+
+	_ Packet = &ExtendedReplyPacket{}
+)
+
 type testExtendedData struct {
 	value uint8
 }
@@ -29,8 +35,6 @@ func (d *testExtendedData) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
-
-var _ Packet = &ExtendedPacket{}
 
 func TestExtendedPacketNoData(t *testing.T) {
 	const (
@@ -60,7 +64,6 @@ func TestExtendedPacketNoData(t *testing.T) {
 
 	*p = ExtendedPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -107,7 +110,6 @@ func TestExtendedPacketTestData(t *testing.T) {
 		Data: new(testExtendedData),
 	}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -116,16 +118,18 @@ func TestExtendedPacketTestData(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): ExtendedRequest was %q, but expected %q", p.ExtendedRequest, extendedRequest)
 	}
 
-	if buf, ok := p.Data.(*testExtendedData); !ok {
+	switch buf, ok := p.Data.(*testExtendedData); {
+	case !ok:
+
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if buf.value != value {
+	case buf.value != value:
+
 		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
 	}
 
 	*p = ExtendedPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -136,15 +140,16 @@ func TestExtendedPacketTestData(t *testing.T) {
 
 	wantBuffer := []byte{0x27}
 
-	if buf, ok := p.Data.(*Buffer); !ok {
+	switch buf, ok := p.Data.(*Buffer); {
+	case !ok:
+
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if !bytes.Equal(buf.b, wantBuffer) {
+	case !bytes.Equal(buf.b, wantBuffer):
+
 		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", buf.b, wantBuffer)
 	}
 }
-
-var _ Packet = &ExtendedReplyPacket{}
 
 func TestExtendedReplyNoData(t *testing.T) {
 	const (
@@ -170,7 +175,6 @@ func TestExtendedReplyNoData(t *testing.T) {
 
 	*p = ExtendedReplyPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -210,31 +214,35 @@ func TestExtendedReplyPacketTestData(t *testing.T) {
 		Data: new(testExtendedData),
 	}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if buf, ok := p.Data.(*testExtendedData); !ok {
+	switch buf, ok := p.Data.(*testExtendedData); {
+	case !ok:
+
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if buf.value != value {
+	case buf.value != value:
+
 		t.Errorf("UnmarshalPacketBody(): Data.value was %#x, but expected %#x", buf.value, value)
 	}
 
 	*p = ExtendedReplyPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 
 	wantBuffer := []byte{0x27}
 
-	if buf, ok := p.Data.(*Buffer); !ok {
+	switch buf, ok := p.Data.(*Buffer); {
+	case !ok:
+
 		t.Errorf("UnmarshalPacketBody(): Data was type %T, but expected %T", p.Data, buf)
 
-	} else if !bytes.Equal(buf.b, wantBuffer) {
+	case !bytes.Equal(buf.b, wantBuffer):
+
 		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", buf.b, wantBuffer)
 	}
 }

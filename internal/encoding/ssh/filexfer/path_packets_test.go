@@ -5,7 +5,27 @@ import (
 	"testing"
 )
 
-var _ Packet = &LStatPacket{}
+var (
+	_ Packet = &LStatPacket{}
+
+	_ Packet = &SetstatPacket{}
+
+	_ Packet = &RemovePacket{}
+
+	_ Packet = &MkdirPacket{}
+
+	_ Packet = &RmdirPacket{}
+
+	_ Packet = &RealPathPacket{}
+
+	_ Packet = &StatPacket{}
+
+	_ Packet = &RenamePacket{}
+
+	_ Packet = &ReadLinkPacket{}
+
+	_ Packet = &SymlinkPacket{}
+)
 
 func TestLStatPacket(t *testing.T) {
 	const (
@@ -35,7 +55,6 @@ func TestLStatPacket(t *testing.T) {
 
 	*p = LStatPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -44,8 +63,6 @@ func TestLStatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &SetstatPacket{}
 
 func TestSetstatPacket(t *testing.T) {
 	const (
@@ -82,7 +99,6 @@ func TestSetstatPacket(t *testing.T) {
 
 	*p = SetstatPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -99,8 +115,6 @@ func TestSetstatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
-
-var _ Packet = &RemovePacket{}
 
 func TestRemovePacket(t *testing.T) {
 	const (
@@ -130,7 +144,6 @@ func TestRemovePacket(t *testing.T) {
 
 	*p = RemovePacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -139,8 +152,6 @@ func TestRemovePacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &MkdirPacket{}
 
 func TestMkdirPacket(t *testing.T) {
 	const (
@@ -177,7 +188,6 @@ func TestMkdirPacket(t *testing.T) {
 
 	*p = MkdirPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -194,8 +204,6 @@ func TestMkdirPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
-
-var _ Packet = &RmdirPacket{}
 
 func TestRmdirPacket(t *testing.T) {
 	const (
@@ -225,7 +233,6 @@ func TestRmdirPacket(t *testing.T) {
 
 	*p = RmdirPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -234,8 +241,6 @@ func TestRmdirPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &RealPathPacket{}
 
 func TestRealPathPacket(t *testing.T) {
 	const (
@@ -265,7 +270,6 @@ func TestRealPathPacket(t *testing.T) {
 
 	*p = RealPathPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -274,8 +278,6 @@ func TestRealPathPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &StatPacket{}
 
 func TestStatPacket(t *testing.T) {
 	const (
@@ -305,7 +307,6 @@ func TestStatPacket(t *testing.T) {
 
 	*p = StatPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -314,8 +315,6 @@ func TestStatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &RenamePacket{}
 
 func TestRenamePacket(t *testing.T) {
 	const (
@@ -348,7 +347,6 @@ func TestRenamePacket(t *testing.T) {
 
 	*p = RenamePacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -361,8 +359,6 @@ func TestRenamePacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): NewPath was %q, but expected %q", p.NewPath, newpath)
 	}
 }
-
-var _ Packet = &ReadLinkPacket{}
 
 func TestReadLinkPacket(t *testing.T) {
 	const (
@@ -392,7 +388,6 @@ func TestReadLinkPacket(t *testing.T) {
 
 	*p = ReadLinkPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -401,8 +396,6 @@ func TestReadLinkPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Path was %q, but expected %q", p.Path, path)
 	}
 }
-
-var _ Packet = &SymlinkPacket{}
 
 func TestSymlinkPacket(t *testing.T) {
 	const (
@@ -425,7 +418,7 @@ func TestSymlinkPacket(t *testing.T) {
 		0x00, 0x00, 0x00, 21,
 		20,
 		0x00, 0x00, 0x00, 42,
-		0x00, 0x00, 0x00, 4, '/', 'b', 'a', 'r', // Arguments were inadvertently reversed.
+		0x00, 0x00, 0x00, 4, '/', 'b', 'a', 'r',
 		0x00, 0x00, 0x00, 4, '/', 'f', 'o', 'o',
 	}
 
@@ -435,7 +428,6 @@ func TestSymlinkPacket(t *testing.T) {
 
 	*p = SymlinkPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

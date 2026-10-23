@@ -34,6 +34,7 @@ func TestSupportedExtensions(t *testing.T) {
 		_, err := getSupportedExtensionByName(supportedExtension.Name)
 		assert.NoError(t, err)
 	}
+
 	_, err := getSupportedExtensionByName("invalid@example.com")
 	assert.Error(t, err)
 }
@@ -63,7 +64,6 @@ func TestExtensions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSFTPExtensions, sftpExtensions)
 
-	// if we only have an invalid extension nothing will be modified.
 	invalidSFTPExtensions = []string{
 		"hardlink@openssh.com",
 		"invalid@example.com",

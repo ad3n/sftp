@@ -6,12 +6,20 @@ import (
 	sshfx "github.com/ad3n/sftp/internal/encoding/ssh/filexfer"
 )
 
-// isRegular returns true if the mode describes a regular file.
+const (
+	s_ISUID = uint32(sshfx.ModeSetUID)
+
+	s_ISGID = uint32(sshfx.ModeSetGID)
+
+	s_ISVTX = uint32(sshfx.ModeSticky)
+
+	S_IFMT = uint32(sshfx.ModeType)
+)
+
 func isRegular(mode uint32) bool {
 	return sshfx.FileMode(mode)&sshfx.ModeType == sshfx.ModeRegular
 }
 
-// toFileMode converts sftp filemode bits to the os.FileMode specification
 func toFileMode(mode uint32) os.FileMode {
 	var fm = os.FileMode(mode & 0777)
 
@@ -27,7 +35,7 @@ func toFileMode(mode uint32) os.FileMode {
 	case sshfx.ModeSymlink:
 		fm |= os.ModeSymlink
 	case sshfx.ModeRegular:
-		// nothing to do
+
 	case sshfx.ModeSocket:
 		fm |= os.ModeSocket
 	}
@@ -35,9 +43,11 @@ func toFileMode(mode uint32) os.FileMode {
 	if sshfx.FileMode(mode)&sshfx.ModeSetUID != 0 {
 		fm |= os.ModeSetuid
 	}
+
 	if sshfx.FileMode(mode)&sshfx.ModeSetGID != 0 {
 		fm |= os.ModeSetgid
 	}
+
 	if sshfx.FileMode(mode)&sshfx.ModeSticky != 0 {
 		fm |= os.ModeSticky
 	}
@@ -45,7 +55,6 @@ func toFileMode(mode uint32) os.FileMode {
 	return fm
 }
 
-// fromFileMode converts from the os.FileMode specification to sftp filemode bits
 func fromFileMode(mode os.FileMode) uint32 {
 	ret := sshfx.FileMode(mode & os.ModePerm)
 
@@ -69,26 +78,14 @@ func fromFileMode(mode os.FileMode) uint32 {
 	if mode&os.ModeSetuid != 0 {
 		ret |= sshfx.ModeSetUID
 	}
+
 	if mode&os.ModeSetgid != 0 {
 		ret |= sshfx.ModeSetGID
 	}
+
 	if mode&os.ModeSticky != 0 {
 		ret |= sshfx.ModeSticky
 	}
 
 	return uint32(ret)
 }
-
-const (
-	s_ISUID = uint32(sshfx.ModeSetUID)
-	s_ISGID = uint32(sshfx.ModeSetGID)
-	s_ISVTX = uint32(sshfx.ModeSticky)
-)
-
-// S_IFMT is a legacy export, and was brought in to support GOOS environments whose sysconfig.S_IFMT may be different from the value used internally by SFTP standards.
-// There should be no reason why you need to import it, or use it, but unexporting it could cause code to break in a way that cannot be readily fixed.
-// As such, we continue to export this value as the value used in the SFTP standard.
-//
-// Deprecated: Remove use of this value, and avoid any future use as well.
-// There is no alternative provided, you should never need to access this value.
-const S_IFMT = uint32(sshfx.ModeType)

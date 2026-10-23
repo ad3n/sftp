@@ -1,14 +1,19 @@
 package sshfx
 
-// InitPacket defines the SSH_FXP_INIT packet.
-type InitPacket struct {
-	Version    uint32
-	Extensions []*ExtensionPair
-}
+type (
+	InitPacket struct {
+		Version    uint32
+		Extensions []*ExtensionPair
+	}
 
-// MarshalBinary returns p as the binary encoding of p.
+	VersionPacket struct {
+		Version    uint32
+		Extensions []*ExtensionPair
+	}
+)
+
 func (p *InitPacket) MarshalBinary() ([]byte, error) {
-	size := 1 + 4 // byte(type) + uint32(version)
+	size := 1 + 4
 
 	for _, ext := range p.Extensions {
 		size += ext.Len()
@@ -27,9 +32,6 @@ func (p *InitPacket) MarshalBinary() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
 func (p *InitPacket) UnmarshalBinary(data []byte) (err error) {
 	buf := NewBuffer(data)
 
@@ -49,15 +51,8 @@ func (p *InitPacket) UnmarshalBinary(data []byte) (err error) {
 	return buf.Err
 }
 
-// VersionPacket defines the SSH_FXP_VERSION packet.
-type VersionPacket struct {
-	Version    uint32
-	Extensions []*ExtensionPair
-}
-
-// MarshalBinary returns p as the binary encoding of p.
 func (p *VersionPacket) MarshalBinary() ([]byte, error) {
-	size := 1 + 4 // byte(type) + uint32(version)
+	size := 1 + 4
 
 	for _, ext := range p.Extensions {
 		size += ext.Len()
@@ -76,9 +71,6 @@ func (p *VersionPacket) MarshalBinary() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// UnmarshalBinary unmarshals a full raw packet out of the given data.
-// It is assumed that the uint32(length) has already been consumed to receive the data.
-// It is also assumed that the uint8(type) has already been consumed to which packet to unmarshal into.
 func (p *VersionPacket) UnmarshalBinary(data []byte) (err error) {
 	buf := NewBuffer(data)
 

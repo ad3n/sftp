@@ -4,13 +4,7 @@ import (
 	"fmt"
 )
 
-// Status defines the SFTP error codes used in SSH_FXP_STATUS response packets.
-type Status uint32
-
-// Defines the various SSH_FX_* values.
 const (
-	// see draft-ietf-secsh-filexfer-02
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt#section-7
 	StatusOK = Status(iota)
 	StatusEOF
 	StatusNoSuchFile
@@ -21,28 +15,23 @@ const (
 	StatusConnectionLost
 	StatusOPUnsupported
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-03.txt#section-7
 	StatusV4InvalidHandle
 	StatusV4NoSuchPath
 	StatusV4FileAlreadyExists
 	StatusV4WriteProtect
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-04.txt#section-7
 	StatusV4NoMedia
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-05.txt#section-7
 	StatusV5NoSpaceOnFilesystem
 	StatusV5QuotaExceeded
 	StatusV5UnknownPrincipal
 	StatusV5LockConflict
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-06.txt#section-8
 	StatusV6DirNotEmpty
 	StatusV6NotADirectory
 	StatusV6InvalidFilename
 	StatusV6LinkLoop
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-07.txt#section-8
 	StatusV6CannotDelete
 	StatusV6InvalidParameter
 	StatusV6FileIsADirectory
@@ -50,23 +39,20 @@ const (
 	StatusV6ByteRangeLockRefused
 	StatusV6DeletePending
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-08.txt#section-8.1
 	StatusV6FileCorrupt
 
-	// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-10.txt#section-9.1
 	StatusV6OwnerInvalid
 	StatusV6GroupInvalid
 
-	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-9.1
 	StatusV6NoMatchingByteRangeLock
 )
+
+type Status uint32
 
 func (s Status) Error() string {
 	return s.String()
 }
 
-// Is returns true if the target is the same Status code,
-// or target is a StatusPacket with the same Status code.
 func (s Status) Is(target error) bool {
 	if target, ok := target.(*StatusPacket); ok {
 		return target.StatusCode == s

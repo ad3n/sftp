@@ -12,6 +12,27 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var rootFileInfo = &winRootFileInfo{
+	name:    "/",
+	modTime: time.Now(),
+}
+
+type (
+	driveInfo struct {
+		fs.FileInfo
+		name string
+	}
+
+	winRoot struct {
+		drives []string
+	}
+
+	winRootFileInfo struct {
+		name    string
+		modTime time.Time
+	}
+)
+
 func (s *Server) toLocalPath(p string) string {
 	if s.workDir != "" && !path.IsAbs(p) {
 		p = path.Join(s.workDir, p)
@@ -19,9 +40,9 @@ func (s *Server) toLocalPath(p string) string {
 
 	lp := filepath.FromSlash(p)
 
-	if path.IsAbs(p) { // starts with '/'
+	if path.IsAbs(p) {
 		if len(p) == 1 && s.winRoot {
-			return `\\.\` // for openfile
+			return `\\.\`
 		}
 
 		tmp := lp
@@ -30,23 +51,16 @@ func (s *Server) toLocalPath(p string) string {
 		}
 
 		if filepath.IsAbs(tmp) {
-			// If the FromSlash without any starting slashes is absolute,
-			// then we have a filepath encoded with a prefix '/'.
-			// e.g. "/C:/Windows" to "C:\\Windows"
 			return tmp
 		}
 
 		tmp += "\\"
 
 		if filepath.IsAbs(tmp) {
-			// If the FromSlash without any starting slashes but with extra end slash is absolute,
-			// then we have a filepath encoded with a prefix '/' and a dropped '/' at the end.
-			// e.g. "/C:" to "C:\\"
 			return tmp
 		}
 
 		if s.winRoot {
-			// Make it so that "/Windows" is not found, and "/c:/Windows" has to be used
 			return `\\.\` + tmp
 		}
 	}
@@ -62,6 +76,7 @@ func bitsToDrives(bitmap uint32) []string {
 		if bitmap&1 == 1 {
 			drives = append(drives, string(drive)+":")
 		}
+
 		drive++
 		bitmap >>= 1
 	}
@@ -74,20 +89,12 @@ func getDrives() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("GetLogicalDrives: %w", err)
 	}
+
 	return bitsToDrives(mask), nil
 }
 
-type driveInfo struct {
-	fs.FileInfo
-	name string
-}
-
 func (i *driveInfo) Name() string {
-	return i.name // since the Name() returned from a os.Stat("C:\\") is "\\"
-}
-
-type winRoot struct {
-	drives []string
+	return i.name
 }
 
 func newWinRoot() (*winRoot, error) {
@@ -95,6 +102,7 @@ func newWinRoot() (*winRoot, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &winRoot{
 		drives: drives,
 	}, nil
@@ -105,6 +113,7 @@ func (f *winRoot) Readdir(n int) ([]os.FileInfo, error) {
 	if n > 0 && len(drives) > n {
 		drives = drives[:n]
 	}
+
 	f.drives = f.drives[len(drives):]
 	if len(drives) == 0 {
 		return nil, io.EOF
@@ -157,31 +166,22 @@ func (s *Server) openfile(path string, flag int, mode fs.FileMode) (file, error)
 	if path == `\\.\` && s.winRoot {
 		return newWinRoot()
 	}
-	return os.OpenFile(path, flag, mode)
-}
 
-type winRootFileInfo struct {
-	name    string
-	modTime time.Time
+	return os.OpenFile(path, flag, mode)
 }
 
 func (w *winRootFileInfo) Name() string       { return w.name }
 func (w *winRootFileInfo) Size() int64        { return 0 }
-func (w *winRootFileInfo) Mode() fs.FileMode  { return fs.ModeDir | 0555 } // read+execute for all
+func (w *winRootFileInfo) Mode() fs.FileMode  { return fs.ModeDir | 0555 }
 func (w *winRootFileInfo) ModTime() time.Time { return w.modTime }
 func (w *winRootFileInfo) IsDir() bool        { return true }
-func (w *winRootFileInfo) Sys() any   { return nil }
-
-// Create a new root FileInfo
-var rootFileInfo = &winRootFileInfo{
-	name:    "/",
-	modTime: time.Now(),
-}
+func (w *winRootFileInfo) Sys() any           { return nil }
 
 func (s *Server) lstat(name string) (os.FileInfo, error) {
 	if name == `\\.\` && s.winRoot {
 		return rootFileInfo, nil
 	}
+
 	return os.Lstat(name)
 }
 
@@ -189,5 +189,6 @@ func (s *Server) stat(name string) (os.FileInfo, error) {
 	if name == `\\.\` && s.winRoot {
 		return rootFileInfo, nil
 	}
+
 	return os.Stat(name)
 }

@@ -1,11 +1,13 @@
 package sftp
 
-// bufPool provides a pool of byte-slices to be reused in various parts of the package.
-// It is safe to use concurrently through a pointer.
-type bufPool struct {
-	ch   chan []byte
-	blen int
-}
+type (
+	bufPool struct {
+		ch   chan []byte
+		blen int
+	}
+
+	resChanPool chan chan result
+)
 
 func newBufPool(depth, bufLen int) *bufPool {
 	return &bufPool{
@@ -23,7 +25,6 @@ func (p *bufPool) Get() []byte {
 		select {
 		case b := <-p.ch:
 			if cap(b) < p.blen {
-				// just in case: throw away any buffer with insufficient capacity.
 				continue
 			}
 
@@ -37,16 +38,10 @@ func (p *bufPool) Get() []byte {
 
 func (p *bufPool) Put(b []byte) {
 	if p == nil {
-		// functional default: no reuse.
 		return
 	}
 
 	if cap(b) < p.blen || cap(b) > p.blen*2 {
-		// DO NOT reuse buffers with insufficient capacity.
-		// This could cause panics when resizing to p.blen.
-
-		// DO NOT reuse buffers with excessive capacity.
-		// This could cause memory leaks.
 		return
 	}
 
@@ -55,8 +50,6 @@ func (p *bufPool) Put(b []byte) {
 	default:
 	}
 }
-
-type resChanPool chan chan result
 
 func newResChanPool(depth int) resChanPool {
 	return make(chan chan result, depth)

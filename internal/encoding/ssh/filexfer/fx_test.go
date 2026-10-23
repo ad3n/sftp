@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// This string data is copied verbatim from https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-13.txt
 var fxStandardsText = `
 SSH_FX_OK                            0
 SSH_FX_EOF                           1
@@ -90,12 +89,15 @@ func TestStatusIs(t *testing.T) {
 	if !errors.Is(status, StatusFailure) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
 	}
+
 	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
 	}
+
 	if errors.Is(status, StatusOK) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
 	}
+
 	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
 	}

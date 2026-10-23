@@ -37,7 +37,6 @@ func TestInitPacket(t *testing.T) {
 
 	*p = InitPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalBinary(buf[5:]); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -91,7 +90,6 @@ func TestVersionPacket(t *testing.T) {
 
 	*p = VersionPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalBinary(buf[5:]); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

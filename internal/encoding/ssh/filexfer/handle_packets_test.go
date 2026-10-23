@@ -5,7 +5,19 @@ import (
 	"testing"
 )
 
-var _ Packet = &ClosePacket{}
+var (
+	_ Packet = &ClosePacket{}
+
+	_ Packet = &ReadPacket{}
+
+	_ Packet = &WritePacket{}
+
+	_ Packet = &FStatPacket{}
+
+	_ Packet = &FSetstatPacket{}
+
+	_ Packet = &ReadDirPacket{}
+)
 
 func TestClosePacket(t *testing.T) {
 	const (
@@ -35,7 +47,6 @@ func TestClosePacket(t *testing.T) {
 
 	*p = ClosePacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -44,8 +55,6 @@ func TestClosePacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
-
-var _ Packet = &ReadPacket{}
 
 func TestReadPacket(t *testing.T) {
 	const (
@@ -81,7 +90,6 @@ func TestReadPacket(t *testing.T) {
 
 	*p = ReadPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -98,8 +106,6 @@ func TestReadPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Length was %x, but expected %x", p.Length, length)
 	}
 }
-
-var _ Packet = &WritePacket{}
 
 func TestWritePacket(t *testing.T) {
 	const (
@@ -136,7 +142,6 @@ func TestWritePacket(t *testing.T) {
 
 	*p = WritePacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -153,8 +158,6 @@ func TestWritePacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Data was %X, but expected %X", p.Data, payload)
 	}
 }
-
-var _ Packet = &FStatPacket{}
 
 func TestFStatPacket(t *testing.T) {
 	const (
@@ -184,7 +187,6 @@ func TestFStatPacket(t *testing.T) {
 
 	*p = FStatPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -193,8 +195,6 @@ func TestFStatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
-
-var _ Packet = &FSetstatPacket{}
 
 func TestFSetstatPacket(t *testing.T) {
 	const (
@@ -231,7 +231,6 @@ func TestFSetstatPacket(t *testing.T) {
 
 	*p = FSetstatPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -240,8 +239,6 @@ func TestFSetstatPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
-
-var _ Packet = &ReadDirPacket{}
 
 func TestReadDirPacket(t *testing.T) {
 	const (
@@ -271,7 +268,6 @@ func TestReadDirPacket(t *testing.T) {
 
 	*p = ReadDirPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

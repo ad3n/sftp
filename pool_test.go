@@ -21,10 +21,7 @@ func TestResChanPoolConcurrentUse(t *testing.T) {
 	pool := newResChanPool(workers)
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for range 100 {
 				ch := pool.Get()
 				ch <- result{typ: sshFxpStatus}
@@ -32,8 +29,9 @@ func TestResChanPoolConcurrentUse(t *testing.T) {
 				assert.Equal(t, fxp(sshFxpStatus), got.typ)
 				pool.Put(ch)
 			}
-		}()
+		})
 	}
+
 	wg.Wait()
 }
 

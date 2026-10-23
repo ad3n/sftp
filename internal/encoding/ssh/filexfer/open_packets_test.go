@@ -5,7 +5,11 @@ import (
 	"testing"
 )
 
-var _ Packet = &OpenPacket{}
+var (
+	_ Packet = &OpenPacket{}
+
+	_ Packet = &OpenDirPacket{}
+)
 
 func TestOpenPacket(t *testing.T) {
 	const (
@@ -44,7 +48,6 @@ func TestOpenPacket(t *testing.T) {
 
 	*p = OpenPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -65,8 +68,6 @@ func TestOpenPacket(t *testing.T) {
 		t.Errorf("UnmarshalPacketBody(): Attrs.Permissions was %#v, but expected %#v", p.Attrs.Permissions, perms)
 	}
 }
-
-var _ Packet = &OpenDirPacket{}
 
 func TestOpenDirPacket(t *testing.T) {
 	const (
@@ -96,7 +97,6 @@ func TestOpenDirPacket(t *testing.T) {
 
 	*p = OpenDirPacket{}
 
-	// UnmarshalPacketBody assumes the (length, type, request-id) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

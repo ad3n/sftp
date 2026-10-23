@@ -11,8 +11,10 @@ func TestClientStatVFS(t *testing.T) {
 	if *testServerImpl {
 		t.Skipf("go server does not support FXP_EXTENDED")
 	}
+
 	sftp, cmd := testClient(t, READWRITE, NODELAY)
 	defer cmd.Wait()
+
 	defer sftp.Close()
 
 	_, ok := sftp.HasExtension("statvfs@openssh.com")
@@ -23,14 +25,12 @@ func TestClientStatVFS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// get system stats
 	s := syscall.Statfs_t{}
 	err = syscall.Statfs("/", &s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// check some stats
 	if vfs.Frsize != uint64(s.Frsize) {
 		t.Fatalf("fr_size does not match, expected: %v, got: %v", s.Frsize, vfs.Frsize)
 	}

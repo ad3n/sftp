@@ -1,5 +1,4 @@
 //go:build !plan9
-// +build !plan9
 
 package sftp
 
@@ -14,10 +13,10 @@ func wrapPathError(filepath string, err error) error {
 	if errno, ok := err.(syscall.Errno); ok {
 		return &os.PathError{Path: filepath, Err: errno}
 	}
+
 	return err
 }
 
-// translateErrno translates a syscall error number to a SFTP error code.
 func translateErrno(errno syscall.Errno) uint32 {
 	switch errno {
 	case 0:
@@ -41,5 +40,6 @@ func translateSyscallError(err error) (uint32, bool) {
 			return translateErrno(errno), true
 		}
 	}
+
 	return 0, false
 }

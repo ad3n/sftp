@@ -1,5 +1,3 @@
-// buffered-write-benchmark benchmarks the peformance of writing
-// a single large []byte on the client to /dev/null on the server via io.Copy.
 package main
 
 import (
@@ -19,9 +17,13 @@ import (
 
 var (
 	USER = flag.String("user", os.Getenv("USER"), "ssh username")
+
 	HOST = flag.String("host", "localhost", "ssh server hostname")
+
 	PORT = flag.Int("port", 22, "ssh server port")
+
 	PASS = flag.String("pass", os.Getenv("SOCKSIE_SSH_PASSWORD"), "ssh password")
+
 	SIZE = flag.Int("s", 1<<15, "set max packet size")
 )
 
@@ -33,8 +35,8 @@ func main() {
 	var auths []ssh.AuthMethod
 	if aconn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
 		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(aconn).Signers))
-
 	}
+
 	if *PASS != "" {
 		auths = append(auths, ssh.Password(*PASS))
 	}
@@ -77,8 +79,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if n != size {
 		log.Fatalf("copy: expected %v bytes, got %d", size, n)
 	}
+
 	log.Printf("wrote %v bytes in %s", size, time.Since(t1))
 }

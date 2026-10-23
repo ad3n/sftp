@@ -1,5 +1,4 @@
 //go:build !windows && !plan9
-// +build !windows,!plan9
 
 package sftp
 
@@ -17,8 +16,10 @@ func testOsSys(sys any) error {
 	if fstat.UID != uint32(65534) {
 		return errors.New("Uid failed to match")
 	}
+
 	if fstat.GID != uint32(65534) {
 		return errors.New("Gid failed to match")
 	}
+
 	return nil
 }

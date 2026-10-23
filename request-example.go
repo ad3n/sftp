@@ -1,9 +1,5 @@
 package sftp
 
-// This serves as an example of how to implement the request server handler as
-// well as a dummy backend for testing. It implements an in-memory backend that
-// works as a very simple filesystem with simple flat key-value lookup system.
-
 import (
 	"errors"
 	"io"
@@ -20,7 +16,30 @@ const maxSymlinkFollows = 5
 
 var errTooManySymlinks = errors.New("too many symbolic links")
 
-// InMemHandler returns a Handlers object with the test handlers.
+type (
+	listerat []os.FileInfo
+
+	root struct {
+		mockErr error
+
+		rootFile *memFile
+		files    map[string]*memFile
+
+		mu sync.Mutex
+	}
+
+	memFile struct {
+		modtime time.Time
+		err     error
+		name    string
+		symlink string
+		content []byte
+
+		mu    sync.RWMutex
+		isdir bool
+	}
+)
+
 func InMemHandler() Handlers {
 	root := &root{
 		rootFile: &memFile{name: "/", modtime: time.Now(), isdir: true},
@@ -29,11 +48,9 @@ func InMemHandler() Handlers {
 	return Handlers{root, root, root, root}
 }
 
-// Example Handlers
 func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 	flags := r.Pflags()
 	if !flags.Read {
-		// sanity check
 		return nil, os.ErrInvalid
 	}
 
@@ -43,7 +60,6 @@ func (fs *root) Fileread(r *Request) (io.ReaderAt, error) {
 func (fs *root) Filewrite(r *Request) (io.WriterAt, error) {
 	flags := r.Pflags()
 	if !flags.Write {
-		// sanity check
 		return nil, os.ErrInvalid
 	}
 
@@ -54,7 +70,8 @@ func (fs *root) OpenFile(r *Request) (WriterAtReaderAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -92,11 +109,10 @@ func (fs *root) openfile(pathname string, flags uint32) (*memFile, error) {
 		}
 
 		var count int
-		// You can create files through dangling symlinks.
+
 		link, err := fs.lfetch(pathname)
 		for err == nil && link.symlink != "" {
 			if pflags.Excl {
-				// unless you also passed in O_EXCL
 				return nil, os.ErrInvalid
 			}
 
@@ -144,7 +160,8 @@ func (fs *root) Filecmd(r *Request) error {
 	if fs.mockErr != nil {
 		return fs.mockErr
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -163,8 +180,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return nil
 
 	case "Rename":
-		// SFTP-v2: "It is an error if there already exists a file with the name specified by newpath."
-		// This varies from the POSIX specification, which allows limited replacement of target files.
+
 		if fs.exists(r.Target) {
 			return os.ErrExist
 		}
@@ -175,8 +191,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.rmdir(r.Filepath)
 
 	case "Remove":
-		// IEEE 1003.1 remove explicitly can unlink files and remove empty directories.
-		// We use instead here the semantics of unlink, which is allowed to be restricted against directories.
+
 		return fs.unlink(r.Filepath)
 
 	case "Mkdir":
@@ -186,7 +201,7 @@ func (fs *root) Filecmd(r *Request) error {
 		return fs.link(r.Filepath, r.Target)
 
 	case "Symlink":
-		// NOTE: r.Filepath is the target, and r.Target is the linkpath.
+
 		return fs.symlink(r.Filepath, r.Target)
 	}
 
@@ -211,23 +226,18 @@ func (fs *root) rename(oldpath, newpath string) error {
 	target, err := fs.lfetch(newpath)
 	if err != os.ErrNotExist {
 		if target == file {
-			// IEEE 1003.1: if oldpath and newpath are the same directory entry,
-			// then return no error, and perform no further action.
 			return nil
 		}
 
 		switch {
 		case file.IsDir():
-			// IEEE 1003.1: if oldpath is a directory, and newpath exists,
-			// then newpath must be a directory, and empty.
-			// It is to be removed prior to rename.
+
 			if err := fs.rmdir(newpath); err != nil {
 				return err
 			}
 
 		case target.IsDir():
-			// IEEE 1003.1: if oldpath is not a directory, and newpath exists,
-			// then newpath may not be a directory.
+
 			return syscall.EISDIR
 		}
 	}
@@ -238,8 +248,8 @@ func (fs *root) rename(oldpath, newpath string) error {
 		dirprefix := file.name + "/"
 
 		for name, file := range fs.files {
-			if strings.HasPrefix(name, dirprefix) {
-				newname := path.Join(newpath, strings.TrimPrefix(name, dirprefix))
+			if after, ok := strings.CutPrefix(name, dirprefix); ok {
+				newname := path.Join(newpath, after)
 
 				fs.files[newname] = file
 				file.name = newname
@@ -258,7 +268,8 @@ func (fs *root) PosixRename(r *Request) error {
 	if fs.mockErr != nil {
 		return fs.mockErr
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -284,7 +295,6 @@ func (fs *root) mkdir(pathname string) error {
 }
 
 func (fs *root) rmdir(pathname string) error {
-	// IEEE 1003.1: If pathname is a symlink, then rmdir should fail with ENOTDIR.
 	dir, err := fs.lfetch(pathname)
 	if err != nil {
 		return err
@@ -294,8 +304,6 @@ func (fs *root) rmdir(pathname string) error {
 		return syscall.ENOTDIR
 	}
 
-	// use the dir‘s internal name not the pathname we passed in.
-	// the dir.name is always the canonical name of a directory.
 	pathname = dir.name
 
 	for name := range fs.files {
@@ -322,8 +330,6 @@ func (fs *root) link(oldpath, newpath string) error {
 	return fs.putfile(newpath, file)
 }
 
-// symlink() creates a symbolic link named `linkpath` which contains the string `target`.
-// NOTE! This would be called with `symlink(req.Filepath, req.Target)` due to different semantics.
 func (fs *root) symlink(target, linkpath string) error {
 	link := &memFile{
 		modtime: time.Now(),
@@ -334,37 +340,31 @@ func (fs *root) symlink(target, linkpath string) error {
 }
 
 func (fs *root) unlink(pathname string) error {
-	// does not follow symlinks!
 	file, err := fs.lfetch(pathname)
 	if err != nil {
 		return err
 	}
 
 	if file.IsDir() {
-		// IEEE 1003.1: implementations may opt out of allowing the unlinking of directories.
-		// SFTP-v2: SSH_FXP_REMOVE may not remove directories.
 		return os.ErrInvalid
 	}
 
-	// DO NOT use the file’s internal name.
-	// because of hard-links files cannot have a single canonical name.
 	delete(fs.files, pathname)
 
 	return nil
 }
 
-type listerat []os.FileInfo
-
-// Modeled after strings.Reader's ReadAt() implementation
 func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 	var n int
 	if offset >= int64(len(f)) {
 		return 0, io.EOF
 	}
+
 	n = copy(ls, f[offset:])
 	if n < len(ls) {
 		return n, io.EOF
 	}
+
 	return n, nil
 }
 
@@ -372,7 +372,8 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -383,6 +384,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return listerat(files), nil
 
 	case "Stat":
@@ -390,6 +392,7 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return listerat{file}, nil
 	}
 
@@ -432,12 +435,12 @@ func (fs *root) Readlink(pathname string) (string, error) {
 	return file.symlink, nil
 }
 
-// implements LstatFileLister interface
 func (fs *root) Lstat(r *Request) (ListerAt, error) {
 	if fs.mockErr != nil {
 		return nil, fs.mockErr
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -446,20 +449,10 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return listerat{file}, nil
 }
 
-// In memory file-system-y thing that the Handlers live on
-type root struct {
-	rootFile *memFile
-	mockErr  error
-
-	mu    sync.Mutex
-	files map[string]*memFile
-}
-
-// Set a mocked error that the next handler call will return.
-// Set to nil to reset for no error.
 func (fs *root) returnErr(err error) {
 	fs.mockErr = err
 }
@@ -481,9 +474,6 @@ func (fs *root) lfetch(path string) (*memFile, error) {
 	return file, nil
 }
 
-// canonName returns the “canonical” name of a file, that is:
-// if the directory of the pathname is a symlink, it follows that symlink to the valid directory name.
-// this is relatively easy, since `dir.name` will be the only valid canonical path for a directory.
 func (fs *root) canonName(pathname string) (string, error) {
 	dirname, filename := path.Dir(pathname), path.Base(pathname)
 
@@ -536,25 +526,9 @@ func (fs *root) fetch(pathname string) (*memFile, error) {
 	return file, nil
 }
 
-// Implements os.FileInfo, io.ReaderAt and io.WriterAt interfaces.
-// These are the 3 interfaces necessary for the Handlers.
-// Implements the optional interface TransferError.
-type memFile struct {
-	name    string
-	modtime time.Time
-	symlink string
-	isdir   bool
-
-	mu      sync.RWMutex
-	content []byte
-	err     error
-}
-
-// These are helper functions, they must be called while holding the memFile.mu mutex
 func (f *memFile) size() int64  { return int64(len(f.content)) }
 func (f *memFile) grow(n int64) { f.content = append(f.content, make([]byte, n)...) }
 
-// Have memFile fulfill os.FileInfo interface
 func (f *memFile) Name() string { return path.Base(f.name) }
 func (f *memFile) Size() int64 {
 	f.mu.Lock()
@@ -566,9 +540,11 @@ func (f *memFile) Mode() os.FileMode {
 	if f.isdir {
 		return os.FileMode(0755) | os.ModeDir
 	}
+
 	if f.symlink != "" {
 		return os.FileMode(0777) | os.ModeSymlink
 	}
+
 	return os.FileMode(0644)
 }
 func (f *memFile) ModTime() time.Time { return f.modtime }
@@ -602,8 +578,6 @@ func (f *memFile) ReadAt(b []byte, off int64) (int, error) {
 }
 
 func (f *memFile) WriteAt(b []byte, off int64) (int, error) {
-	// fmt.Println(string(p), off)
-	// mimic write delays, should be optional
 	time.Sleep(time.Microsecond * time.Duration(len(b)))
 
 	f.mu.Lock()
@@ -630,9 +604,13 @@ func (f *memFile) Truncate(size int64) error {
 	}
 
 	grow := size - f.size()
-	if grow <= 0 {
+	switch {
+	case grow <= 0:
+
 		f.content = f.content[:size]
-	} else {
+
+	default:
+
 		f.grow(grow)
 	}
 

@@ -10,17 +10,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testHandler struct {
-	filecontents []byte      // dummy contents
-	output       io.WriterAt // dummy file out
-	err          error       // dummy error, should be file related
-}
+var (
+	filecontents = []byte("file-data.")
+
+	errTest = errors.New("test error")
+)
+
+type (
+	testHandler struct {
+		filecontents []byte
+		output       io.WriterAt
+		err          error
+	}
+
+	fakefile [10]byte
+
+	fakePacket struct {
+		myid   uint32
+		handle string
+	}
+)
 
 func (t *testHandler) Fileread(r *Request) (io.ReaderAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 	return bytes.NewReader(t.filecontents), nil
 }
 
@@ -28,12 +44,13 @@ func (t *testHandler) Filewrite(r *Request) (io.WriterAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 	return io.WriterAt(t.output), nil
 }
 
 func (t *testHandler) Filecmd(r *Request) error {
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+	_ = r.WithContext(r.Context())
 	return t.err
 }
 
@@ -41,24 +58,21 @@ func (t *testHandler) Filelist(r *Request) (ListerAt, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	_ = r.WithContext(r.Context()) // initialize context for deadlock testing
+
+	_ = r.WithContext(r.Context())
 	f, err := os.Open(r.Filepath)
 	if err != nil {
 		return nil, err
 	}
+
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
+
 	return listerat([]os.FileInfo{fi}), nil
 }
 
-// make sure len(fakefile) == len(filecontents)
-type fakefile [10]byte
-
-var filecontents = []byte("file-data.")
-
-// XXX need new for creating test requests that supports Open-ing
 func testRequest(method string) *Request {
 	var flags uint32
 	switch method {
@@ -67,6 +81,7 @@ func testRequest(method string) *Request {
 	case "Put":
 		flags = flags | sshFxfWrite
 	}
+
 	request := &Request{
 		Filepath: "./request_test.go",
 		Method:   method,
@@ -107,8 +122,6 @@ func (h Handlers) getOutString() string {
 	return handler.output.(*fakefile).string()
 }
 
-var errTest = errors.New("test error")
-
 func (h *Handlers) returnError(err error) {
 	handler := h.FilePut.(*testHandler)
 	handler.err = err
@@ -124,12 +137,6 @@ func checkOkStatus(t *testing.T, p any) {
 		"sshFxpStatusPacket not OK\n", pkt.StatusError.msg)
 }
 
-// fake/test packet
-type fakePacket struct {
-	myid   uint32
-	handle string
-}
-
 func (f fakePacket) id() uint32 {
 	return f.myid
 }
@@ -139,13 +146,12 @@ func (f fakePacket) getHandle() string {
 }
 func (fakePacket) UnmarshalBinary(d []byte) error { return nil }
 
-// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestGet(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Get")
 	pkt := fakePacket{myid: 1}
 	request.open(handlers, pkt)
-	// req.length is 5, so we test reads in 5 byte chunks
+
 	for i, txt := range []string{"file-", "data."} {
 		pkt := &sshFxpReadPacket{ID: uint32(i), Handle: "a",
 			Offset: uint64(i * 5), Len: 5}
@@ -166,7 +172,6 @@ func TestRequestCustomError(t *testing.T) {
 	assert.Equal(t, rpkt, statusFromError(pkt.myid, cmdErr))
 }
 
-// XXX can't just set method to Get, need to use Open to setup Get/Put
 func TestRequestPut(t *testing.T) {
 	handlers := newTestHandlers()
 	request := testRequest("Put")
@@ -214,6 +219,7 @@ func TestRequestInfoList(t *testing.T) {
 	if assert.True(t, ok) {
 		assert.Equal(t, hpkt.Handle, "1")
 	}
+
 	pkt = fakePacket{myid: 2}
 	request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 }
@@ -244,6 +250,7 @@ func TestOpendirHandleReuse(t *testing.T) {
 		hpkt := rpkt.(*sshFxpHandlePacket)
 		assert.Equal(t, hpkt.Handle, "1")
 	}
+
 	rpkt = request.call(handlers, pkt, nil, 0, defaultMaxTxPacket)
 	assert.IsType(t, &sshFxpNamePacket{}, rpkt)
 }

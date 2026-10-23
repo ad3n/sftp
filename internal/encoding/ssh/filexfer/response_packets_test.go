@@ -6,6 +6,18 @@ import (
 	"testing"
 )
 
+var (
+	_ Packet = &StatusPacket{}
+
+	_ Packet = &HandlePacket{}
+
+	_ Packet = &DataPacket{}
+
+	_ Packet = &NamePacket{}
+
+	_ Packet = &AttrsPacket{}
+)
+
 func TestStatusPacketIs(t *testing.T) {
 	status := &StatusPacket{
 		StatusCode:   StatusFailure,
@@ -16,18 +28,19 @@ func TestStatusPacketIs(t *testing.T) {
 	if !errors.Is(status, StatusFailure) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) != true")
 	}
+
 	if !errors.Is(status, &StatusPacket{StatusCode: StatusFailure}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) != true")
 	}
+
 	if errors.Is(status, StatusOK) {
 		t.Error("errors.Is(StatusFailure, StatusFailure) == true")
 	}
+
 	if errors.Is(status, &StatusPacket{StatusCode: StatusOK}) {
 		t.Error("errors.Is(StatusFailure, StatusPacket{StatusFailure}) == true")
 	}
 }
-
-var _ Packet = &StatusPacket{}
 
 func TestStatusPacket(t *testing.T) {
 	const (
@@ -63,7 +76,6 @@ func TestStatusPacket(t *testing.T) {
 
 	*p = StatusPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -80,8 +92,6 @@ func TestStatusPacket(t *testing.T) {
 		t.Errorf("UnmarshalBinary(): LanguageTag was %q, but expected %q", p.LanguageTag, languageTag)
 	}
 }
-
-var _ Packet = &HandlePacket{}
 
 func TestHandlePacket(t *testing.T) {
 	const (
@@ -111,7 +121,6 @@ func TestHandlePacket(t *testing.T) {
 
 	*p = HandlePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -120,8 +129,6 @@ func TestHandlePacket(t *testing.T) {
 		t.Errorf("UnmarshalBinary(): Handle was %q, but expected %q", p.Handle, handle)
 	}
 }
-
-var _ Packet = &DataPacket{}
 
 func TestDataPacket(t *testing.T) {
 	const (
@@ -152,7 +159,6 @@ func TestDataPacket(t *testing.T) {
 
 	*p = DataPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -161,8 +167,6 @@ func TestDataPacket(t *testing.T) {
 		t.Errorf("UnmarshalBinary(): Data was %X, but expected %X", p.Data, payload)
 	}
 }
-
-var _ Packet = &NamePacket{}
 
 func TestNamePacket(t *testing.T) {
 	const (
@@ -219,7 +223,6 @@ func TestNamePacket(t *testing.T) {
 
 	*p = NamePacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
@@ -246,8 +249,6 @@ func TestNamePacket(t *testing.T) {
 		}
 	}
 }
-
-var _ Packet = &AttrsPacket{}
 
 func TestAttrsPacket(t *testing.T) {
 	const (
@@ -281,7 +282,6 @@ func TestAttrsPacket(t *testing.T) {
 
 	*p = AttrsPacket{}
 
-	// UnmarshalBinary assumes the uint32(length) + uint8(type) have already been consumed.
 	if err := p.UnmarshalPacketBody(NewBuffer(buf[9:])); err != nil {
 		t.Fatal("unexpected error:", err)
 	}

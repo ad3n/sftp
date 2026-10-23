@@ -1,5 +1,3 @@
-// Package sftp implements the SSH File Transfer Protocol as described in
-// https://filezilla-project.org/specs/draft-ietf-secsh-filexfer-02.txt
 package sftp
 
 import (
@@ -7,93 +5,165 @@ import (
 )
 
 const (
-	sshFxpInit          = 1
-	sshFxpVersion       = 2
-	sshFxpOpen          = 3
-	sshFxpClose         = 4
-	sshFxpRead          = 5
-	sshFxpWrite         = 6
-	sshFxpLstat         = 7
-	sshFxpFstat         = 8
-	sshFxpSetstat       = 9
-	sshFxpFsetstat      = 10
-	sshFxpOpendir       = 11
-	sshFxpReaddir       = 12
-	sshFxpRemove        = 13
-	sshFxpMkdir         = 14
-	sshFxpRmdir         = 15
-	sshFxpRealpath      = 16
-	sshFxpStat          = 17
-	sshFxpRename        = 18
-	sshFxpReadlink      = 19
-	sshFxpSymlink       = 20
-	sshFxpStatus        = 101
-	sshFxpHandle        = 102
-	sshFxpData          = 103
-	sshFxpName          = 104
-	sshFxpAttrs         = 105
-	sshFxpExtended      = 200
+	sshFxpInit = 1
+
+	sshFxpVersion = 2
+
+	sshFxpOpen = 3
+
+	sshFxpClose = 4
+
+	sshFxpRead = 5
+
+	sshFxpWrite = 6
+
+	sshFxpLstat = 7
+
+	sshFxpFstat = 8
+
+	sshFxpSetstat = 9
+
+	sshFxpFsetstat = 10
+
+	sshFxpOpendir = 11
+
+	sshFxpReaddir = 12
+
+	sshFxpRemove = 13
+
+	sshFxpMkdir = 14
+
+	sshFxpRmdir = 15
+
+	sshFxpRealpath = 16
+
+	sshFxpStat = 17
+
+	sshFxpRename = 18
+
+	sshFxpReadlink = 19
+
+	sshFxpSymlink = 20
+
+	sshFxpStatus = 101
+
+	sshFxpHandle = 102
+
+	sshFxpData = 103
+
+	sshFxpName = 104
+
+	sshFxpAttrs = 105
+
+	sshFxpExtended = 200
+
 	sshFxpExtendedReply = 201
-)
 
-const (
-	sshFxOk               = 0
-	sshFxEOF              = 1
-	sshFxNoSuchFile       = 2
+	sshFxOk = 0
+
+	sshFxEOF = 1
+
+	sshFxNoSuchFile = 2
+
 	sshFxPermissionDenied = 3
-	sshFxFailure          = 4
-	sshFxBadMessage       = 5
-	sshFxNoConnection     = 6
-	sshFxConnectionLost   = 7
-	sshFxOPUnsupported    = 8
 
-	// see draft-ietf-secsh-filexfer-13
-	// https://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-9.1
-	sshFxInvalidHandle           = 9
-	sshFxNoSuchPath              = 10
-	sshFxFileAlreadyExists       = 11
-	sshFxWriteProtect            = 12
-	sshFxNoMedia                 = 13
-	sshFxNoSpaceOnFilesystem     = 14
-	sshFxQuotaExceeded           = 15
-	sshFxUnknownPrincipal        = 16
-	sshFxLockConflict            = 17
-	sshFxDirNotEmpty             = 18
-	sshFxNotADirectory           = 19
-	sshFxInvalidFilename         = 20
-	sshFxLinkLoop                = 21
-	sshFxCannotDelete            = 22
-	sshFxInvalidParameter        = 23
-	sshFxFileIsADirectory        = 24
-	sshFxByteRangeLockConflict   = 25
-	sshFxByteRangeLockRefused    = 26
-	sshFxDeletePending           = 27
-	sshFxFileCorrupt             = 28
-	sshFxOwnerInvalid            = 29
-	sshFxGroupInvalid            = 30
+	sshFxFailure = 4
+
+	sshFxBadMessage = 5
+
+	sshFxNoConnection = 6
+
+	sshFxConnectionLost = 7
+
+	sshFxOPUnsupported = 8
+
+	sshFxInvalidHandle = 9
+
+	sshFxNoSuchPath = 10
+
+	sshFxFileAlreadyExists = 11
+
+	sshFxWriteProtect = 12
+
+	sshFxNoMedia = 13
+
+	sshFxNoSpaceOnFilesystem = 14
+
+	sshFxQuotaExceeded = 15
+
+	sshFxUnknownPrincipal = 16
+
+	sshFxLockConflict = 17
+
+	sshFxDirNotEmpty = 18
+
+	sshFxNotADirectory = 19
+
+	sshFxInvalidFilename = 20
+
+	sshFxLinkLoop = 21
+
+	sshFxCannotDelete = 22
+
+	sshFxInvalidParameter = 23
+
+	sshFxFileIsADirectory = 24
+
+	sshFxByteRangeLockConflict = 25
+
+	sshFxByteRangeLockRefused = 26
+
+	sshFxDeletePending = 27
+
+	sshFxFileCorrupt = 28
+
+	sshFxOwnerInvalid = 29
+
+	sshFxGroupInvalid = 30
+
 	sshFxNoMatchingByteRangeLock = 31
-)
 
-const (
-	sshFxfRead   = 0x00000001
-	sshFxfWrite  = 0x00000002
+	sshFxfRead = 0x00000001
+
+	sshFxfWrite = 0x00000002
+
 	sshFxfAppend = 0x00000004
-	sshFxfCreat  = 0x00000008
-	sshFxfTrunc  = 0x00000010
-	sshFxfExcl   = 0x00000020
+
+	sshFxfCreat = 0x00000008
+
+	sshFxfTrunc = 0x00000010
+
+	sshFxfExcl = 0x00000020
 )
 
 var (
-	// supportedSFTPExtensions defines the supported extensions
 	supportedSFTPExtensions = []sshExtensionPair{
 		{"hardlink@openssh.com", "1"},
 		{"posix-rename@openssh.com", "1"},
 		{"statvfs@openssh.com", "2"},
 	}
+
 	sftpExtensions = supportedSFTPExtensions
 )
 
-type fxp uint8
+type (
+	fxp uint8
+
+	fx uint8
+
+	unexpectedPacketErr struct {
+		want, got fxp
+	}
+
+	unexpectedIDErr struct{ want, got uint32 }
+
+	unexpectedVersionErr struct{ want, got uint32 }
+
+	StatusError struct {
+		Code      uint32
+		msg, lang string
+	}
+)
 
 func (f fxp) String() string {
 	switch f {
@@ -156,8 +226,6 @@ func (f fxp) String() string {
 	}
 }
 
-type fx uint8
-
 func (f fx) String() string {
 	switch f {
 	case sshFxOk:
@@ -183,10 +251,6 @@ func (f fx) String() string {
 	}
 }
 
-type unexpectedPacketErr struct {
-	want, got fxp
-}
-
 func (u *unexpectedPacketErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected packet: want %v, got %v", u.want, u.got)
 }
@@ -194,8 +258,6 @@ func (u *unexpectedPacketErr) Error() string {
 func unimplementedPacketErr(u fxp) error {
 	return fmt.Errorf("sftp: unimplemented packet type: got %v", u)
 }
-
-type unexpectedIDErr struct{ want, got uint32 }
 
 func (u *unexpectedIDErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected id: want %d, got %d", u.want, u.got)
@@ -209,24 +271,14 @@ func unexpectedCount(want, got uint32) error {
 	return fmt.Errorf("sftp: unexpected count: want %d, got %d", want, got)
 }
 
-type unexpectedVersionErr struct{ want, got uint32 }
-
 func (u *unexpectedVersionErr) Error() string {
 	return fmt.Sprintf("sftp: unexpected server version: want %v, got %v", u.want, u.got)
-}
-
-// A StatusError is returned when an SFTP operation fails, and provides
-// additional information about the failure.
-type StatusError struct {
-	Code      uint32
-	msg, lang string
 }
 
 func (s *StatusError) Error() string {
 	return fmt.Sprintf("sftp: %q (%v)", s.msg, fx(s.Code))
 }
 
-// FxCode returns the error code typed to match against the exported codes
 func (s *StatusError) FxCode() fxerr {
 	return fxerr(s.Code)
 }
@@ -237,13 +289,10 @@ func getSupportedExtensionByName(extensionName string) (sshExtensionPair, error)
 			return supportedExtension, nil
 		}
 	}
+
 	return sshExtensionPair{}, fmt.Errorf("unsupported extension: %s", extensionName)
 }
 
-// SetSFTPExtensions allows to customize the supported server extensions.
-// See the variable supportedSFTPExtensions for supported extensions.
-// This method accepts a slice of sshExtensionPair names for example 'hardlink@openssh.com'.
-// If an invalid extension is given an error will be returned and nothing will be changed
 func SetSFTPExtensions(extensions ...string) error {
 	tempExtensions := []sshExtensionPair{}
 	for _, extension := range extensions {
@@ -251,8 +300,10 @@ func SetSFTPExtensions(extensions ...string) error {
 		if err != nil {
 			return err
 		}
+
 		tempExtensions = append(tempExtensions, sftpExtension)
 	}
+
 	sftpExtensions = tempExtensions
 	return nil
 }

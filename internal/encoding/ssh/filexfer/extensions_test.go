@@ -45,5 +45,4 @@ func TestExtensionPair(t *testing.T) {
 	if pair.Data != data {
 		t.Errorf("RawPacket.UnmarshalBinary(): Data was %q, but expected %q", pair.Data, data)
 	}
-
 }
