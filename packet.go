@@ -1,7 +1,6 @@
 package sftp
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/binary"
 	"errors"
@@ -1431,12 +1430,26 @@ func (p *StatVFS) FreeSpace() uint64 {
 }
 
 func (p *StatVFS) marshalPacket() ([]byte, []byte, error) {
-	header := []byte{0, 0, 0, 0, sshFxpExtendedReply}
+	if p == nil {
+		return []byte{0, 0, 0, 0, sshFxpExtendedReply}, nil, binary.Write(io.Discard, binary.BigEndian, p)
+	}
 
-	var buf bytes.Buffer
-	err := binary.Write(&buf, binary.BigEndian, p)
+	b := make([]byte, 5, 5+4+11*8)
+	b[4] = sshFxpExtendedReply
+	b = marshalUint32(b, p.ID)
+	b = marshalUint64(b, p.Bsize)
+	b = marshalUint64(b, p.Frsize)
+	b = marshalUint64(b, p.Blocks)
+	b = marshalUint64(b, p.Bfree)
+	b = marshalUint64(b, p.Bavail)
+	b = marshalUint64(b, p.Files)
+	b = marshalUint64(b, p.Ffree)
+	b = marshalUint64(b, p.Favail)
+	b = marshalUint64(b, p.Fsid)
+	b = marshalUint64(b, p.Flag)
+	b = marshalUint64(b, p.Namemax)
 
-	return header, buf.Bytes(), err
+	return b[:5], b[5:], nil
 }
 
 func (p *StatVFS) MarshalBinary() ([]byte, error) {

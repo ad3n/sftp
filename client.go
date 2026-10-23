@@ -338,7 +338,7 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 			}
 		case sshFxpStatus:
 
-			err = normaliseError(unmarshalStatus(id, data))
+			err = normaliseStatus(id, data)
 			done = true
 		default:
 			return nil, unimplementedPacketErr(typ)
@@ -376,7 +376,7 @@ func (c *Client) opendir(ctx context.Context, path string) (string, error) {
 
 		return handle, nil
 	case sshFxpStatus:
-		return "", normaliseError(unmarshalStatus(id, data))
+		return "", normaliseStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
 	}
@@ -415,7 +415,7 @@ func (c *Client) Lstat(p string) (os.FileInfo, error) {
 
 		return fileInfoFromStat(attr, path.Base(p)), nil
 	case sshFxpStatus:
-		return nil, normaliseError(unmarshalStatus(id, data))
+		return nil, normaliseStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -454,7 +454,7 @@ func (c *Client) ReadLink(p string) (string, error) {
 
 		return filename, nil
 	case sshFxpStatus:
-		return "", normaliseError(unmarshalStatus(id, data))
+		return "", normaliseStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
 	}
@@ -473,7 +473,7 @@ func (c *Client) Link(oldname, newname string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -492,7 +492,7 @@ func (c *Client) Symlink(oldname, newname string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -512,7 +512,7 @@ func (c *Client) fsetstat(handle string, flags uint32, attrs any) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -532,7 +532,7 @@ func (c *Client) setstat(path string, flags uint32, attrs any) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -604,7 +604,7 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 
 		return &File{c: c, path: path, handle: handle}, nil
 	case sshFxpStatus:
-		return nil, normaliseError(unmarshalStatus(id, data))
+		return nil, normaliseStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -622,7 +622,7 @@ func (c *Client) close(handle string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -648,7 +648,7 @@ func (c *Client) stat(path string) (*FileStat, error) {
 		attr, _, err := unmarshalAttrs(data)
 		return attr, err
 	case sshFxpStatus:
-		return nil, normaliseError(unmarshalStatus(id, data))
+		return nil, normaliseStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -674,7 +674,7 @@ func (c *Client) fstat(handle string) (*FileStat, error) {
 		attr, _, err := unmarshalAttrs(data)
 		return attr, err
 	case sshFxpStatus:
-		return nil, normaliseError(unmarshalStatus(id, data))
+		return nil, normaliseStatus(id, data)
 	default:
 		return nil, unimplementedPacketErr(typ)
 	}
@@ -701,7 +701,7 @@ func (c *Client) StatVFS(path string) (*StatVFS, error) {
 		return &response, nil
 
 	case sshFxpStatus:
-		return nil, normaliseError(unmarshalStatus(id, data))
+		return nil, normaliseStatus(id, data)
 
 	default:
 		return nil, unimplementedPacketErr(typ)
@@ -751,7 +751,7 @@ func (c *Client) removeFile(path string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		err = normaliseError(unmarshalStatus(id, data))
+		err = normaliseStatus(id, data)
 		if err == nil {
 			return nil
 		}
@@ -778,7 +778,7 @@ func (c *Client) RemoveDirectory(path string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		err = normaliseError(unmarshalStatus(id, data))
+		err = normaliseStatus(id, data)
 		if err == nil {
 			return nil
 		}
@@ -806,7 +806,7 @@ func (c *Client) Rename(oldname, newname string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -825,7 +825,7 @@ func (c *Client) PosixRename(oldname, newname string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -864,7 +864,7 @@ func (c *Client) RealPath(path string) (string, error) {
 
 		return filename, nil
 	case sshFxpStatus:
-		return "", normaliseError(unmarshalStatus(id, data))
+		return "", normaliseStatus(id, data)
 	default:
 		return "", unimplementedPacketErr(typ)
 	}
@@ -886,7 +886,7 @@ func (c *Client) Mkdir(path string) error {
 
 	switch typ {
 	case sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return unimplementedPacketErr(typ)
 	}
@@ -1008,7 +1008,7 @@ func (f *File) readChunkAt(ch chan result, b []byte, off int64) (n int, err erro
 
 		switch typ {
 		case sshFxpStatus:
-			return n, normaliseError(unmarshalStatus(id, data))
+			return n, normaliseStatus(id, data)
 
 		case sshFxpData:
 			data, err = unmarshalDataReply(id, data)
@@ -1142,7 +1142,7 @@ func (f *File) readAt(b []byte, off int64) (int, error) {
 				if err == nil {
 					switch s.typ {
 					case sshFxpStatus:
-						err = normaliseError(unmarshalStatus(packet.id, s.data))
+						err = normaliseStatus(packet.id, s.data)
 
 					case sshFxpData:
 						var data []byte
@@ -1346,7 +1346,7 @@ func (f *File) WriteTo(w io.Writer) (written int64, err error) {
 				if err == nil {
 					switch s.typ {
 					case sshFxpStatus:
-						err = normaliseError(unmarshalStatus(readWork.id, s.data))
+						err = normaliseStatus(readWork.id, s.data)
 
 					case sshFxpData:
 						var data []byte
@@ -1460,7 +1460,7 @@ func (f *File) writeChunkAt(ch chan result, b []byte, off int64) (int, error) {
 			return 0, err
 		}
 
-		err = normaliseError(unmarshalStatus(id, data))
+		err = normaliseStatus(id, data)
 		if err != nil {
 			return 0, err
 		}
@@ -1542,7 +1542,7 @@ func (f *File) writeAtConcurrent(b []byte, off int64) (int, error) {
 				if err == nil {
 					switch s.typ {
 					case sshFxpStatus:
-						err = normaliseError(unmarshalStatus(work.id, s.data))
+						err = normaliseStatus(work.id, s.data)
 					default:
 						err = unimplementedPacketErr(s.typ)
 					}
@@ -1712,7 +1712,7 @@ func (f *File) readFromWithConcurrency(r io.Reader, concurrency int) (read int64
 				if err == nil {
 					switch s.typ {
 					case sshFxpStatus:
-						err = normaliseError(unmarshalStatus(work.id, s.data))
+						err = normaliseStatus(work.id, s.data)
 					default:
 						err = unimplementedPacketErr(s.typ)
 					}
@@ -1943,9 +1943,36 @@ func (f *File) Sync() error {
 	case err != nil:
 		return err
 	case typ == sshFxpStatus:
-		return normaliseError(unmarshalStatus(id, data))
+		return normaliseStatus(id, data)
 	default:
 		return &unexpectedPacketErr{want: sshFxpStatus, got: typ}
+	}
+}
+
+func normaliseStatus(id uint32, data []byte) error {
+	data, err := unmarshalSID(id, data)
+	if err != nil {
+		return err
+	}
+
+	code, data, err := unmarshalUint32Safe(data)
+	if err != nil {
+		return err
+	}
+
+	switch code {
+	case sshFxOk:
+		return nil
+	case sshFxEOF:
+		return io.EOF
+	case sshFxNoSuchFile:
+		return os.ErrNotExist
+	case sshFxPermissionDenied:
+		return os.ErrPermission
+	default:
+		msg, data, _ := unmarshalStringSafe(data)
+		lang, _, _ := unmarshalStringSafe(data)
+		return &StatusError{Code: code, msg: msg, lang: lang}
 	}
 }
 
