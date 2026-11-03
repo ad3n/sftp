@@ -326,6 +326,45 @@ func TestReadOnlyServerRejectsWrites(t *testing.T) {
 	f.Close()
 }
 
+func TestRenameDoesNotOverwrite(t *testing.T) {
+	client, server := clientServerPair(t)
+	defer func() {
+		server.Close()
+		client.Close()
+	}()
+
+	dir := t.TempDir()
+	oldpath := path.Join(dir, "old")
+	newpath := path.Join(dir, "new")
+	require.NoError(t, os.WriteFile(oldpath, []byte("old"), 0o644))
+	require.NoError(t, os.WriteFile(newpath, []byte("new"), 0o644))
+
+	assert.Error(t, client.Rename(oldpath, newpath))
+
+	b, err := os.ReadFile(oldpath)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(b))
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(b))
+
+	require.NoError(t, os.Remove(newpath))
+	require.NoError(t, client.Rename(oldpath, newpath))
+	assert.NoFileExists(t, oldpath)
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(b))
+
+	require.NoError(t, os.WriteFile(oldpath, []byte("posix"), 0o644))
+	require.NoError(t, client.PosixRename(oldpath, newpath))
+	assert.NoFileExists(t, oldpath)
+	b, err = os.ReadFile(newpath)
+	require.NoError(t, err)
+	assert.Equal(t, "posix", string(b))
+
+	checkServerAllocator(t, server)
+}
+
 func TestStatNonExistent(t *testing.T) {
 	client, server := clientServerPair(t)
 	defer client.Close()
