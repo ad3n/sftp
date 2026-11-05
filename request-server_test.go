@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,12 @@ type (
 
 	rootWithLegacyRealPather struct {
 		root
+	}
+
+	rootWithOpenAttrs struct {
+		mu        sync.Mutex
+		attrFlags FileAttrFlags
+		attrs     *FileStat
 	}
 )
 
@@ -180,6 +187,7 @@ func putTestFile(cli *Client, path, content string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	defer w.Close()
 
 	return w.Write([]byte(content))
@@ -190,6 +198,7 @@ func getTestFile(cli *Client, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer r.Close()
 
 	return io.ReadAll(r)
@@ -1001,6 +1010,40 @@ func TestLegacyRealPathFileLister(t *testing.T) {
 	realPath, err = p.cli.RealPath("relpath")
 	require.NoError(t, err)
 	assert.Equal(t, "/relpath", realPath)
+}
+
+func (fs *rootWithOpenAttrs) Filewrite(r *Request) (io.WriterAt, error) {
+	fs.mu.Lock()
+	fs.attrFlags = r.AttrFlags()
+	fs.attrs = r.Attributes()
+	fs.mu.Unlock()
+	return &memFile{}, nil
+}
+
+func TestRequestOpenAttributes(t *testing.T) {
+	root := &rootWithOpenAttrs{}
+	handlers := Handlers{FilePut: root}
+	p := clientRequestServerPairWithHandlers(t, handlers)
+	defer p.Close()
+
+	id := p.cli.nextID()
+	typ, _, err := p.cli.sendPacket(context.Background(), nil, &sshFxpOpenPacket{
+		ID:     id,
+		Path:   "/foo",
+		Pflags: sshFxfWrite | sshFxfCreat | sshFxfTrunc,
+		Flags:  sshFileXferAttrSize | sshFileXferAttrPermissions,
+		Attrs:  &FileStat{Size: 1234, Mode: 0o640},
+	})
+	require.NoError(t, err)
+	require.Equal(t, fxp(sshFxpHandle), typ)
+
+	root.mu.Lock()
+	defer root.mu.Unlock()
+
+	assert.Equal(t, FileAttrFlags{Size: true, Permissions: true}, root.attrFlags)
+	require.NotNil(t, root.attrs)
+	assert.Equal(t, uint64(1234), root.attrs.Size)
+	assert.Equal(t, uint32(0o640), root.attrs.Mode)
 }
 
 func TestCleanPath(t *testing.T) {

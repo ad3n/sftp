@@ -2,6 +2,8 @@ package sftp_test
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
@@ -21,6 +23,7 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	defer client.Close()
 
 	w := client.Walk("/home/user")
@@ -69,6 +72,7 @@ func ExampleNewClientPipe() {
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
+
 	defer cmd.Wait()
 
 	client, err := sftp.NewClientPipe(rd, wr)
@@ -95,6 +99,7 @@ func ExampleClient_Mkdir_parents() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	defer client.Close()
 
 	sshFxFailure := uint32(4)
@@ -144,4 +149,67 @@ func ExampleFile_ReadFrom_bufio() {
 	type writerOnly struct{ io.Writer }
 	bw := bufio.NewWriter(writerOnly{f})
 	bw.ReadFrom(data_source)
+}
+
+func ExampleNewClientPipe_tls() {
+	var clientCert tls.Certificate
+
+	conn, err := tls.Dial("tcp", "example.com:2022", &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client, err := sftp.NewClientPipe(conn, conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer client.Close()
+
+	list, err := client.ReadDir("/")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, item := range list {
+		fmt.Println(item.Name())
+	}
+}
+
+func ExampleNewServer() {
+	var serverCert tls.Certificate
+	var clientCAs *x509.CertPool
+
+	listener, err := tls.Listen("tcp", ":2022", &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    clientCAs,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		go func() {
+			server, err := sftp.NewServer(conn)
+			if err != nil {
+				log.Print(err)
+				conn.Close()
+				return
+			}
+
+			if err := server.Serve(); err != nil && err != io.EOF {
+				log.Print("sftp server completed with error: ", err)
+			}
+
+			conn.Close()
+		}()
+	}
 }

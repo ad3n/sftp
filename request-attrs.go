@@ -35,10 +35,10 @@ func newFileAttrFlags(flags uint32) FileAttrFlags {
 }
 
 func (r *Request) AttrFlags() FileAttrFlags {
-	return newFileAttrFlags(r.Flags)
+	return newFileAttrFlags(r.attrFlags)
 }
 
 func (r *Request) Attributes() *FileStat {
-	fs, _, _ := unmarshalFileStat(r.Flags, r.Attrs)
+	fs, _, _ := unmarshalFileStat(r.attrFlags, r.Attrs)
 	return fs
 }

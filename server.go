@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -250,7 +251,8 @@ func handlePacket(s *Server, p orderedRequest) error {
 		err := os.Remove(s.toLocalPath(p.Filename))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpSymlinkPacket:
-		err := os.Symlink(s.toLocalPath(p.Targetpath), s.toLocalPath(p.Linkpath))
+
+		err := os.Symlink(s.toLocalTarget(p.Targetpath), s.toLocalPath(p.Linkpath))
 		rpkt = statusFromError(p.ID, err)
 	case *sshFxpClosePacket:
 		rpkt = statusFromError(p.ID, s.closeHandle(p.Handle))
@@ -355,6 +357,14 @@ func handlePacket(s *Server, p orderedRequest) error {
 
 	s.pktMgr.readyPacket(s.pktMgr.newOrderedResponse(rpkt, orderID))
 	return nil
+}
+
+func (s *Server) toLocalPath(p string) string {
+	if s.workDir != "" && !path.IsAbs(p) {
+		p = path.Join(s.workDir, p)
+	}
+
+	return s.toLocalTarget(p)
 }
 
 func (svr *Server) Serve() error {
@@ -530,8 +540,6 @@ func (p *sshFxpRenamePacket) respond(svr *Server) responsePacket {
 	oldpath := svr.toLocalPath(p.Oldpath)
 	newpath := svr.toLocalPath(p.Newpath)
 
-	// SSH_FXP_RENAME may not replace an existing file; posix-rename@openssh.com is the overwriting form.
-	// Like OpenSSH, refuse the request when newpath already exists rather than letting os.Rename clobber it.
 	if _, err := svr.lstat(newpath); err == nil {
 		return statusFromError(p.ID, &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EEXIST})
 	}

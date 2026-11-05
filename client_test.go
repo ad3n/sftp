@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kr/fs"
+	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -191,6 +194,91 @@ func TestClientShortPacket(t *testing.T) {
 	_, err := NewClientPipe(r, &sink{})
 	if !errors.Is(err, errShortPacket) {
 		t.Fatalf("expected error: %v, got: %v", errShortPacket, err)
+	}
+}
+
+func subsystemServer(t *testing.T, ok bool, reply []byte) (client *ssh.Client, closed chan struct{}) {
+	config := &ssh.ServerConfig{NoClientAuth: true}
+	config.AddHostKey(hostPrivateKeySigner)
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer l.Close()
+
+	closed = make(chan struct{})
+	go func() {
+		c, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		_, chans, reqs, err := ssh.NewServerConn(c, config)
+		if err != nil {
+			return
+		}
+
+		go ssh.DiscardRequests(reqs)
+
+		newCh := <-chans
+		if newCh == nil {
+			return
+		}
+
+		ch, chReqs, err := newCh.Accept()
+		if err != nil {
+			return
+		}
+
+		go io.Copy(io.Discard, ch)
+
+		for req := range chReqs {
+			req.Reply(ok, nil)
+			if ok {
+				ch.Write(reply)
+			}
+		}
+
+		close(closed)
+	}()
+
+	client, err = ssh.Dial("tcp", l.Addr().String(), &ssh.ClientConfig{
+		User:            "test",
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { client.Close() })
+	return client, closed
+}
+
+func TestNewClientClosesSessionOnError(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		ok    bool
+		reply []byte
+		opts  []ClientOption
+	}{
+		{"subsystem refused", false, nil, nil},
+		{"bad option", true, nil, []ClientOption{MaxPacketChecked(0)}},
+		{"bad version packet", true, []byte{0, 0, 0, 0}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, closed := subsystemServer(t, tt.ok, tt.reply)
+			if _, err := NewClient(conn, tt.opts...); err == nil {
+				t.Fatal("expected an error")
+			}
+
+			select {
+			case <-closed:
+			case <-time.After(5 * time.Second):
+				t.Fatal("session not closed")
+			}
+		})
 	}
 }
 
@@ -453,6 +541,133 @@ func TestClientReadDirSuccess(t *testing.T) {
 	}
 }
 
+func TestClientDuplicateHandle(t *testing.T) {
+	c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+		switch typ {
+		case sshFxpOpen, sshFxpOpendir:
+			return sshFxpHandle, marshalString(marshalUint32(nil, id), "handle"), true
+		default:
+			return 0, nil, false
+		}
+	})
+	defer c.Close()
+
+	f, err := c.Open("/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Open("/b")
+	if err == nil {
+		t.Fatal("expected error opening a file with a handle that is already open")
+	}
+
+	if got, want := err.Error(), `sftp: server returned handle "handle" which is already open; the server may not support multiple open files, use ForceSingleFile`; got != want {
+		t.Errorf("duplicate handle error = %q, want %q", got, want)
+	}
+
+	if err := f.Close(); !errors.Is(err, ErrSSHFxConnectionLost) || !errors.Is(err, c.Wait()) {
+		t.Errorf("closing the existing file after duplicate handle = %v, want connection-lost error with duplicate-handle cause", err)
+	}
+}
+
+func TestClientForceSingleFile(t *testing.T) {
+	var opens, closes int
+	c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+		switch typ {
+		case sshFxpOpen, sshFxpOpendir:
+			opens++
+			return sshFxpHandle, marshalString(marshalUint32(nil, id), "handle"), true
+		case sshFxpClose:
+			closes++
+			return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
+		default:
+			return 0, nil, false
+		}
+	}, ForceSingleFile())
+	defer c.Close()
+
+	f, err := c.Open("/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Open("/b")
+	if err == nil {
+		t.Fatal("expected a synthetic failure while a file is open")
+	}
+
+	var status *StatusError
+	if !errors.As(err, &status) || status.Code != sshFxFailure {
+		t.Fatalf("open error = %v, want SSH_FX_FAILURE", err)
+	}
+
+	if _, err := c.ReadDir("/"); err == nil {
+		t.Fatal("expected a synthetic failure while a file is open")
+	}
+
+	if opens != 1 {
+		t.Fatalf("server received %d open requests, want 1", opens)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err = c.Open("/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if opens != 2 || closes != 2 {
+		t.Errorf("server got %d opens and %d closes, want 2 each", opens, closes)
+	}
+
+}
+
+func TestClientForceSingleFileConcurrentOpenReturnsImmediately(t *testing.T) {
+	c := startScriptedClient(t, func(typ fxp, id uint32) (fxp, []byte, bool) {
+		switch typ {
+		case sshFxpOpen:
+			return sshFxpHandle, marshalString(marshalUint32(nil, id), "handle"), true
+		case sshFxpClose:
+			return sshFxpStatus, statusBody(marshalUint32(nil, id), sshFxOk), true
+		default:
+			return 0, nil, false
+		}
+	}, ForceSingleFile())
+	defer c.Close()
+
+	f, err := c.Open("/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondOpen := make(chan error, 1)
+	go func() {
+		_, err := c.Open("/b")
+		secondOpen <- err
+	}()
+
+	select {
+	case err := <-secondOpen:
+		var status *StatusError
+		if !errors.As(err, &status) || status.Code != sshFxFailure {
+			t.Fatalf("second open error = %v, want immediate SSH_FX_FAILURE", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second open blocked while a file was open")
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClientNoSid(t *testing.T) {
 	stream := new(bytes.Buffer)
 	sendPacket(stream, &sshFxVersionPacket{Version: sftpProtocolVersion})
@@ -519,6 +734,36 @@ func TestClientReadFromWriteError(t *testing.T) {
 
 			if f.offset != tt.wantOffset {
 				t.Errorf("offset = %d, want %d", f.offset, tt.wantOffset)
+			}
+		})
+	}
+}
+
+func TestClientReadFromConnectionLost(t *testing.T) {
+	for _, maxPacket := range []int{5, 8} {
+		name := "full chunk"
+		if maxPacket > 5 {
+			name = "short chunk"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			c := startScriptedClient(t, func(_ fxp, _ uint32) (fxp, []byte, bool) {
+				return 0, nil, false
+			}, MaxPacket(maxPacket))
+			defer c.Close()
+
+			f := &File{c: c, path: "somefile", handle: "somehandle"}
+			n, err := f.ReadFrom(strings.NewReader("hello"))
+			if !errors.Is(err, ErrSSHFxConnectionLost) || !errors.Is(err, io.EOF) {
+				t.Errorf("error = %v, want connection-lost error with EOF cause", err)
+			}
+
+			if n != 5 {
+				t.Errorf("n = %d, want 5", n)
+			}
+
+			if f.offset != 0 {
+				t.Errorf("offset = %d, want 0", f.offset)
 			}
 		})
 	}

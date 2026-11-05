@@ -37,6 +37,11 @@ type (
 
 		stderrTo io.Writer
 
+		handlesMu       sync.Mutex
+		handles         map[string]struct{}
+		singleFileOpen  atomic.Bool
+		forceSingleFile bool
+
 		ext map[string]string
 
 		maxPacket             int
@@ -56,6 +61,10 @@ type (
 		mu     sync.RWMutex
 		handle string
 		offset int64
+	}
+
+	duplicateHandleError struct {
+		handle string
 	}
 )
 
@@ -100,6 +109,13 @@ func MaxConcurrentRequestsPerFile(n int) ClientOption {
 	}
 }
 
+func ForceSingleFile() ClientOption {
+	return func(c *Client) error {
+		c.forceSingleFile = true
+		return nil
+	}
+}
+
 func UseConcurrentWrites(value bool) ClientOption {
 	return func(c *Client) error {
 		c.useConcurrentWrites = value
@@ -136,24 +152,34 @@ func NewClient(conn *ssh.Client, opts ...ClientOption) (*Client, error) {
 
 	pw, err := s.StdinPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 
 	pr, err := s.StdoutPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 
 	perr, err := s.StderrPipe()
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 
 	if err := s.RequestSubsystem("sftp"); err != nil {
+		s.Close()
 		return nil, err
 	}
 
-	return newClientPipe(pr, perr, pw, s.Wait, opts...)
+	c, err := newClientPipe(pr, perr, pw, s.Wait, opts...)
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+
+	return c, nil
 }
 
 func NewClientPipe(rd io.Reader, wr io.WriteCloser, opts ...ClientOption) (*Client, error) {
@@ -168,7 +194,8 @@ func newClientPipe(rd, stderr io.Reader, wr io.WriteCloser, wait func() error, o
 		closed:      make(chan struct{}),
 		wait:        wait,
 
-		ext: make(map[string]string),
+		ext:     make(map[string]string),
+		handles: make(map[string]struct{}),
 
 		maxPacket:             1 << 15,
 		maxConcurrentRequests: 64,
@@ -283,6 +310,7 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 	if err != nil {
 		return nil, err
 	}
+
 	defer c.close(handle)
 
 	var entries []os.FileInfo
@@ -352,7 +380,17 @@ func (c *Client) ReadDirContext(ctx context.Context, p string) ([]os.FileInfo, e
 	return entries, err
 }
 
-func (c *Client) opendir(ctx context.Context, path string) (string, error) {
+func (c *Client) opendir(ctx context.Context, path string) (handle string, err error) {
+	if err = c.lockOpenSlot(); err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err != nil {
+			c.singleFileOpen.Store(false)
+		}
+	}()
+
 	id := c.nextID()
 	typ, data, err := c.sendPacket(ctx, nil, &sshFxpOpendirPacket{
 		ID:   id,
@@ -371,6 +409,10 @@ func (c *Client) opendir(ctx context.Context, path string) (string, error) {
 
 		handle, _, err := unmarshalStringSafe(data)
 		if err != nil {
+			return "", err
+		}
+
+		if err := c.addHandle(handle); err != nil {
 			return "", err
 		}
 
@@ -579,7 +621,17 @@ func (c *Client) OpenFile(path string, f int) (*File, error) {
 	return c.open(path, toPflags(f))
 }
 
-func (c *Client) open(path string, pflags uint32) (*File, error) {
+func (c *Client) open(path string, pflags uint32) (file *File, err error) {
+	if err = c.lockOpenSlot(); err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			c.singleFileOpen.Store(false)
+		}
+	}()
+
 	id := c.nextID()
 	typ, data, err := c.sendPacket(context.Background(), nil, &sshFxpOpenPacket{
 		ID:     id,
@@ -602,6 +654,10 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 			return nil, err
 		}
 
+		if err := c.addHandle(handle); err != nil {
+			return nil, err
+		}
+
 		return &File{c: c, path: path, handle: handle}, nil
 	case sshFxpStatus:
 		return nil, normaliseStatus(id, data)
@@ -611,6 +667,10 @@ func (c *Client) open(path string, pflags uint32) (*File, error) {
 }
 
 func (c *Client) close(handle string) error {
+
+	c.removeHandle(handle)
+	defer c.singleFileOpen.Store(false)
+
 	id := c.nextID()
 	typ, data, err := c.sendPacket(context.Background(), nil, &sshFxpClosePacket{
 		ID:     id,
@@ -626,6 +686,46 @@ func (c *Client) close(handle string) error {
 	default:
 		return unimplementedPacketErr(typ)
 	}
+}
+
+func (c *Client) addHandle(handle string) error {
+	c.handlesMu.Lock()
+	defer c.handlesMu.Unlock()
+
+	if _, ok := c.handles[handle]; ok {
+		err := &duplicateHandleError{handle: handle}
+		c.clientConn.broadcastErr(err)
+		_ = c.clientConn.conn.Close()
+		return err
+	}
+
+	c.handles[handle] = struct{}{}
+	return nil
+}
+
+func (e *duplicateHandleError) Error() string {
+	return fmt.Sprintf("sftp: server returned handle %q which is already open; the server may not support multiple open files, use ForceSingleFile", e.handle)
+}
+
+func (c *Client) lockOpenSlot() error {
+	if !c.forceSingleFile {
+		return nil
+	}
+
+	if !c.singleFileOpen.CompareAndSwap(false, true) {
+		return &StatusError{
+			Code: sshFxFailure,
+			msg:  "ForceSingleFile allows only one open file or directory at a time",
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) removeHandle(handle string) {
+	c.handlesMu.Lock()
+	delete(c.handles, handle)
+	c.handlesMu.Unlock()
 }
 
 func (c *Client) stat(path string) (*FileStat, error) {
@@ -1817,7 +1917,7 @@ func (f *File) ReadFrom(r io.Reader) (int64, error) {
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) && !errors.Is(err, ErrSSHFxConnectionLost) {
 				return read, nil
 			}
 

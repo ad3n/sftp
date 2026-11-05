@@ -24,12 +24,13 @@ type (
 	}
 
 	Request struct {
-		Method   string
-		Filepath string
-		Flags    uint32
-		Attrs    []byte
-		Target   string
-		handle   string
+		Method    string
+		Filepath  string
+		attrFlags uint32
+		Flags     uint32
+		Attrs     []byte
+		Target    string
+		handle    string
 
 		state
 
@@ -161,6 +162,8 @@ func (r *Request) copy() *Request {
 		Target:   r.Target,
 		handle:   r.handle,
 
+		attrFlags: r.attrFlags,
+
 		state: r.state.copy(),
 
 		ctx:       r.ctx,
@@ -178,9 +181,11 @@ func requestFromPacket(ctx context.Context, pkt hasPath, baseDir string) *Reques
 	switch p := pkt.(type) {
 	case *sshFxpOpenPacket:
 		request.Flags = p.Pflags
+		request.attrFlags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpSetstatPacket:
 		request.Flags = p.Flags
+		request.attrFlags = p.Flags
 		request.Attrs = p.Attrs.([]byte)
 	case *sshFxpRenamePacket:
 		request.Target = cleanPathWithBase(baseDir, p.Newpath)
@@ -440,6 +445,7 @@ func filecmd(h FileCmder, r *Request, pkt requestPacket) responsePacket {
 	switch p := pkt.(type) {
 	case *sshFxpFsetstatPacket:
 		r.Flags = p.Flags
+		r.attrFlags = p.Flags
 		r.Attrs = p.Attrs.([]byte)
 	}
 
