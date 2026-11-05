@@ -11,9 +11,11 @@ const (
 
 type (
 	Attributes struct {
-		Flags uint32
+		ExtendedAttributes []ExtendedAttribute
 
 		Size uint64
+
+		Flags uint32
 
 		UID uint32
 		GID uint32
@@ -22,8 +24,6 @@ type (
 
 		ATime uint32
 		MTime uint32
-
-		ExtendedAttributes []ExtendedAttribute
 	}
 
 	ExtendedAttribute struct {

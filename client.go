@@ -33,20 +33,22 @@ type (
 	ClientOption func(*Client) error
 
 	Client struct {
-		clientConn
-
 		stderrTo io.Writer
 
-		handlesMu       sync.Mutex
-		handles         map[string]struct{}
-		singleFileOpen  atomic.Bool
-		forceSingleFile bool
+		handles map[string]struct{}
 
 		ext map[string]string
 
+		clientConn
+
 		maxPacket             int
 		maxConcurrentRequests int
-		nextid                uint32
+
+		handlesMu      sync.Mutex
+		singleFileOpen atomic.Bool
+		nextid         uint32
+
+		forceSingleFile bool
 
 		useConcurrentWrites    bool
 		useFstat               bool
@@ -57,9 +59,10 @@ type (
 		c    *Client
 		path string
 
-		mu     sync.RWMutex
 		handle string
 		offset int64
+
+		mu sync.RWMutex
 	}
 
 	duplicateHandleError struct {

@@ -2,13 +2,13 @@ package sshfx
 
 type (
 	InitPacket struct {
-		Version    uint32
 		Extensions []*ExtensionPair
+		Version    uint32
 	}
 
 	VersionPacket struct {
-		Version    uint32
 		Extensions []*ExtensionPair
+		Version    uint32
 	}
 )
 

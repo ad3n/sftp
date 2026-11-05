@@ -160,8 +160,8 @@ type (
 	unexpectedVersionErr struct{ want, got uint32 }
 
 	StatusError struct {
-		Code      uint32
 		msg, lang string
+		Code      uint32
 	}
 )
 

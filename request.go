@@ -24,18 +24,19 @@ type (
 	}
 
 	Request struct {
+		ctx       context.Context
+		cancelCtx context.CancelFunc
 		Method    string
 		Filepath  string
-		attrFlags uint32
-		Flags     uint32
-		Attrs     []byte
 		Target    string
 		handle    string
 
+		Attrs []byte
+
 		state
 
-		ctx       context.Context
-		cancelCtx context.CancelFunc
+		attrFlags uint32
+		Flags     uint32
 	}
 )
 

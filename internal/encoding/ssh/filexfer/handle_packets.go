@@ -13,8 +13,8 @@ type (
 
 	WritePacket struct {
 		Handle string
-		Offset uint64
 		Data   []byte
+		Offset uint64
 	}
 
 	FStatPacket struct {

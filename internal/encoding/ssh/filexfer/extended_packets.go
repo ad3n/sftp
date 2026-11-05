@@ -21,9 +21,8 @@ type (
 	ExtendedDataConstructor func() ExtendedData
 
 	ExtendedPacket struct {
+		Data            ExtendedData
 		ExtendedRequest string
-
-		Data ExtendedData
 	}
 
 	ExtendedReplyPacket struct {

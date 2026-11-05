@@ -12,8 +12,8 @@ const (
 type (
 	OpenPacket struct {
 		Filename string
-		PFlags   uint32
 		Attrs    Attributes
+		PFlags   uint32
 	}
 
 	OpenDirPacket struct {

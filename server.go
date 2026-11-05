@@ -33,16 +33,16 @@ type (
 	}
 
 	Server struct {
+		debugStream io.Writer
 		*serverConn
-		debugStream   io.Writer
-		readOnly      bool
 		pktMgr        *packetManager
 		openFiles     map[string]file
-		openFilesLock sync.RWMutex
-		handleCount   int
 		workDir       string
-		winRoot       bool
+		handleCount   int
+		openFilesLock sync.RWMutex
 		maxTxPacket   uint32
+		readOnly      bool
+		winRoot       bool
 	}
 
 	serverRespondablePacket interface {

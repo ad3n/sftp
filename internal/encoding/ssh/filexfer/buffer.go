@@ -12,9 +12,9 @@ var (
 )
 
 type Buffer struct {
+	Err error
 	b   []byte
 	off int
-	Err error
 }
 
 func NewBuffer(buf []byte) *Buffer {

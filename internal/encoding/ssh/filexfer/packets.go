@@ -9,16 +9,15 @@ const smallBufferSize = 64
 
 type (
 	RawPacket struct {
-		PacketType PacketType
-		RequestID  uint32
+		Data      Buffer
+		RequestID uint32
 
-		Data Buffer
+		PacketType PacketType
 	}
 
 	RequestPacket struct {
+		Request   Packet
 		RequestID uint32
-
-		Request Packet
 	}
 )
 

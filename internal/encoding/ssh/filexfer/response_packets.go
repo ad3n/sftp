@@ -6,9 +6,9 @@ import (
 
 type (
 	StatusPacket struct {
-		StatusCode   Status
 		ErrorMessage string
 		LanguageTag  string
+		StatusCode   Status
 	}
 
 	HandlePacket struct {

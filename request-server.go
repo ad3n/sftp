@@ -26,12 +26,13 @@ type (
 		*serverConn
 		pktMgr *packetManager
 
-		startDirectory string
-		maxTxPacket    uint32
-
-		mu           sync.RWMutex
-		handleCount  int
 		openRequests map[string]*Request
+
+		startDirectory string
+		handleCount    int
+
+		mu          sync.RWMutex
+		maxTxPacket uint32
 	}
 
 	RequestServerOption func(*RequestServer)

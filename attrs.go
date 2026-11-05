@@ -27,13 +27,13 @@ type (
 	}
 
 	FileStat struct {
+		Extended []StatExtended
 		Size     uint64
 		Mode     uint32
 		Mtime    uint32
 		Atime    uint32
 		UID      uint32
 		GID      uint32
-		Extended []StatExtended
 	}
 
 	StatExtended struct {
