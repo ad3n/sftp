@@ -592,6 +592,15 @@ func sendPacket(w io.Writer, m encoding.BinaryMarshaler) error {
 }
 
 func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (fxp, []byte, error) {
+	if alloc != nil {
+		return recvPacketWithHeader(r, alloc, orderID, nil)
+	}
+
+	var header [4]byte
+	return recvPacketWithHeader(r, alloc, orderID, header[:])
+}
+
+func recvPacketWithHeader(r io.Reader, alloc *allocator, orderID uint32, header []byte) (fxp, []byte, error) {
 	var b []byte
 	switch {
 	case alloc != nil:
@@ -600,7 +609,7 @@ func recvPacket(r io.Reader, alloc *allocator, orderID uint32) (fxp, []byte, err
 
 	default:
 
-		b = make([]byte, 4)
+		b = header
 	}
 
 	if n, err := io.ReadFull(r, b[:4]); err != nil {

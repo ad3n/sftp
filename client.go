@@ -46,7 +46,6 @@ type (
 
 		maxPacket             int
 		maxConcurrentRequests int
-		resPool               resChanPool
 		nextid                uint32
 
 		useConcurrentWrites    bool

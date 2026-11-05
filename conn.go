@@ -16,7 +16,8 @@ type (
 		closeErr error
 		alloc    *allocator
 
-		closeOnce sync.Once
+		recvHeader [4]byte
+		closeOnce  sync.Once
 		sync.Mutex
 	}
 
@@ -25,6 +26,7 @@ type (
 
 		wait func() error
 
+		resPool  resChanPool
 		inflight map[uint32]chan<- result
 
 		closed chan struct{}
@@ -51,7 +53,7 @@ type (
 )
 
 func (c *conn) recvPacket(orderID uint32) (fxp, []byte, error) {
-	return recvPacket(c, c.alloc, orderID)
+	return recvPacketWithHeader(c, c.alloc, orderID, c.recvHeader[:])
 }
 
 func (c *conn) sendPacket(m encoding.BinaryMarshaler) error {
@@ -145,8 +147,9 @@ func (c *clientConn) getChannel(sid uint32) (chan<- result, bool) {
 }
 
 func (c *clientConn) sendPacket(ctx context.Context, ch chan result, p idmarshaler) (fxp, []byte, error) {
-	if cap(ch) < 1 {
-		ch = make(chan result, 1)
+	pooled := cap(ch) < 1
+	if pooled {
+		ch = c.resPool.Get()
 	}
 
 	c.dispatchRequest(ch, p)
@@ -155,6 +158,10 @@ func (c *clientConn) sendPacket(ctx context.Context, ch chan result, p idmarshal
 	case <-ctx.Done():
 		return 0, nil, ctx.Err()
 	case s := <-ch:
+		if pooled {
+			c.resPool.Put(ch)
+		}
+
 		return s.typ, s.data, s.err
 	}
 }

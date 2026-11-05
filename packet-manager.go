@@ -1,8 +1,9 @@
 package sftp
 
 import (
+	"cmp"
 	"encoding"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -77,8 +78,8 @@ func (s *packetManager) newOrderedResponse(p responsePacket, id uint32,
 func (p orderedResponse) orderID() uint32 { return p.orderid }
 
 func (o orderedPackets) Sort() {
-	sort.Slice(o, func(i, j int) bool {
-		return o[i].orderID() < o[j].orderID()
+	slices.SortFunc(o, func(a, b orderedPacket) int {
+		return cmp.Compare(a.orderID(), b.orderID())
 	})
 }
 
